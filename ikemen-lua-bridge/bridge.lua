@@ -323,8 +323,8 @@ function bridge.tick(p1_arg, p2_arg, engine_meta)
     snapshot.events = events
     prev_state = snapshot
 
-    -- Output formatted live telemetry line to stdout every 30 frames
-    if frame_counter % 30 == 0 or (camera.zoom < 0.95 or camera.y < -30) then
+    -- Output formatted live telemetry line cleanly every 60 frames (1 second)
+    if frame_counter % 60 == 0 then
         print(string.format(
             "[FW Live] Frame:%05d | P1_Y:%6.1f | P2_Y:%6.1f | Cam_Y:%6.1f | Zoom:%4.2fx",
             frame_counter, p1.pos.y, p2.pos.y, camera.y, camera.zoom

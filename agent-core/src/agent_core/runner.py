@@ -48,6 +48,7 @@ class MatchRunner:
                 if msg:
                     self.tactical_brain.ingest_chat_message(msg)
                     os.remove(self.chat_file)
+                    print(f"\n📩 [Live Chat Ingested]: \"{msg}\"", flush=True)
             except Exception:
                 pass
 
