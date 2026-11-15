@@ -98,30 +98,48 @@ class ComboEngine:
                     )
 
                 # Case C: Meterless Special Move Chaining (Power < 1000)
-                return FighterAction(
-                    direction=DirectionInput.NEUTRAL,
-                    button=ButtonInput.HEAVY_PUNCH,
-                    cmd="QCF_x",
-                    macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
-                    forward_locked=True,
-                    is_reaction=True,
-                    reaction_type="SPECIAL_HIT_CONFIRM",
-                    absolute_horizontal=0,
-                    meta={"detail": "Meterless Special Hit-Confirm (Kung Fu Palm QCF_x)"},
-                )
+                is_p1_grounded = p1.pos.y >= -5.0
+                is_p2_reachable = p2.pos.y >= -120.0
+
+                if is_p1_grounded and is_p2_reachable:
+                    return FighterAction(
+                        direction=DirectionInput.NEUTRAL,
+                        button=ButtonInput.HEAVY_PUNCH,
+                        cmd="QCF_x",
+                        macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
+                        forward_locked=True,
+                        is_reaction=True,
+                        reaction_type="SPECIAL_HIT_CONFIRM",
+                        absolute_horizontal=0,
+                        meta={"detail": "Meterless Special Hit-Confirm (Kung Fu Palm QCF_x)"},
+                    )
+                else:
+                    return FighterAction(
+                        direction=DirectionInput.NEUTRAL,
+                        button=ButtonInput.HEAVY_PUNCH,
+                        cmd=None,
+                        macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
+                        forward_locked=True,
+                        is_reaction=True,
+                        reaction_type="JUGGLE_HIT_CONFIRM",
+                        absolute_horizontal=0,
+                        meta={"detail": "Aerial/Ceiling target juggle hit-confirm (Normal Attack)"},
+                    )
 
             # Case D: Attack whiffs or is blocked (P1 stopped attacking while P2 was never in hitstun)
             if not p1.is_attacking and p1.movetype != "A" and p2.movetype != "H":
+                is_p1_grounded = p1.pos.y >= -5.0
                 self.reset()
+                guard_dir = DirectionInput.DOWN_BACK if is_p1_grounded else DirectionInput.BACK
                 return FighterAction(
-                    direction=DirectionInput.DOWN_BACK,
+                    direction=guard_dir,
                     button=ButtonInput.NONE,
                     macro_intent=EgoCentricIntent.RETREAT,
                     forward_locked=True,
                     is_reaction=True,
                     reaction_type="COMBO_ABORT_BLOCK",
                     absolute_horizontal=0,
-                    meta={"detail": "Attack blocked or whiffed - aborting combo into crouch guard"},
+                    meta={"detail": "Attack blocked or whiffed - aborting combo into guard"},
                 )
 
             return None

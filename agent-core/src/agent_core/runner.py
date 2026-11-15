@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import re
 import signal
 import sys
 from agent_core.models.telemetry import MatchSnapshot, EgoCentricIntent
@@ -35,12 +36,27 @@ class MatchRunner:
         self._last_processed_frame = -1
         self._frame_count = 0
         self._latest_decision = None
+        self._had_combat_damage = False
+        self._last_reaction_log_frame = -999
+        self._last_reaction_type = None
 
     def on_snapshot(self, snapshot: MatchSnapshot):
         if snapshot.frame == self._last_processed_frame:
             return
         self._last_processed_frame = snapshot.frame
         self._frame_count += 1
+
+        # Round Reset Detection: Both HP reset to 1000 after previous damage
+        if snapshot.p1.life < 1000 or snapshot.p2.life < 1000:
+            self._had_combat_damage = True
+
+        if self._had_combat_damage and snapshot.p1.life == 1000 and snapshot.p2.life == 1000:
+            self._had_combat_damage = False
+            self.combo_engine.reset()
+            self.tactical_brain.reset_round()
+            self._last_reaction_type = None
+            self._last_reaction_log_frame = -999
+            print(f"\n🔔 [ROUND RESET]: Frame {snapshot.frame} - Both HP reset to 1000. Resetting ComboEngine and Coach Chat\n", flush=True)
 
         # Check for live spectator chat coaching from file (supports multiple queued messages)
         if os.path.exists(self.chat_file):
@@ -52,7 +68,7 @@ class MatchRunner:
                     for line in content.splitlines():
                         line = line.strip()
                         if line:
-                            self.tactical_brain.ingest_chat_message(line)
+                            self.tactical_brain.ingest_chat_message(line, frame=snapshot.frame)
                             print(f"\n📩 [Live Chat Ingested]: \"{line}\"", flush=True)
             except Exception:
                 pass
@@ -120,10 +136,30 @@ class MatchRunner:
             )
             if action.cmd:
                 print(f"  💥 [COMBO/SUPER EXECUTION]: {action.cmd} (Reaction: {action.reaction_type})", flush=True)
-            # Display dual-channel thought stream every 60 frames (1 second) or when reaction occurs
-            if self._latest_decision and (snapshot.frame % 60 == 0 or action.is_reaction):
+            # Throttled dual-channel thought stream: min 45-60 frame cooldown or first transition
+            is_new_reaction = bool(action.is_reaction and action.reaction_type != self._last_reaction_type)
+            is_reaction_cooldown_passed = (snapshot.frame - self._last_reaction_log_frame >= 60)
+            should_log_reaction_thought = bool(action.is_reaction and (is_new_reaction or is_reaction_cooldown_passed))
+
+            should_display_thought = False
+            if action.reaction_type == "ROUND_OVER":
+                if is_new_reaction:
+                    should_display_thought = True
+                    self._last_reaction_type = action.reaction_type
+                    self._last_reaction_log_frame = snapshot.frame
+            elif should_log_reaction_thought:
+                should_display_thought = True
+                self._last_reaction_type = action.reaction_type
+                self._last_reaction_log_frame = snapshot.frame
+            elif not action.is_reaction and (snapshot.frame % 60 == 0):
+                should_display_thought = True
+                self._last_reaction_type = None
+
+            if self._latest_decision and should_display_thought:
                 dec = self._latest_decision
-                print(f"  🧠 [P1 Private Mind]: \"{dec.internal_monologue}\"", flush=True)
+                # Sync fresh frame distance into monologue
+                monologue = re.sub(r"([\d\.]+)px", f"{snapshot.distance:.1f}px", dec.internal_monologue)
+                print(f"  🧠 [P1 Private Mind]: \"{monologue}\"", flush=True)
                 print(f"  💬 [P1 In-Game Chat]: \"{dec.public_chat}\"", flush=True)
                 if dec.audience_reply:
                     print(f"  📣 [P1 Crowd Reply]: \"{dec.audience_reply}\"", flush=True)

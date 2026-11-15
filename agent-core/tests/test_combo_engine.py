@@ -132,3 +132,30 @@ def test_combo_engine_clutch_comeback_mode():
     assert action is not None
     assert action.cmd == "TripleKFPalm"
     assert "CLUTCH" in (action.reaction_type or "")
+
+
+def test_combo_engine_airborne_p1_suppresses_ground_special():
+    engine = ComboEngine()
+    # P1 is airborne at y = -25.0 (< -5.0)
+    snap = make_snapshot(p1_movetype="A", p2_movetype="H", p1_power=200, frame=10)
+    snap.p1.pos.y = -25.0
+    engine.state = ComboState.INITIATING
+
+    action = engine.update(snap)
+    # Ground palm QCF_x must NOT be executed mid-air
+    if action is not None:
+        assert action.cmd != "QCF_x"
+
+
+def test_combo_engine_target_ceiling_suppresses_ground_special():
+    engine = ComboEngine()
+    # P2 is knocked high at y = -140.0 (< -120.0)
+    snap = make_snapshot(p1_movetype="A", p2_movetype="H", p1_power=200, frame=10)
+    snap.p2.pos.y = -140.0
+    engine.state = ComboState.INITIATING
+
+    action = engine.update(snap)
+    # Ground palm QCF_x must NOT be executed when target is out of ceiling reach
+    if action is not None:
+        assert action.cmd != "QCF_x"
+

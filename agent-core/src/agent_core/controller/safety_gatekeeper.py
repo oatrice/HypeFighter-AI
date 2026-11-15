@@ -66,6 +66,21 @@ class SafetyGatekeeper:
         p1 = snapshot.p1
         p2 = snapshot.p2
         safe_zone = self.is_in_safe_back_zone(p1, p2)
+        is_p1_grounded = p1.pos.y >= -5.0
+
+        # -1. KO / Round-Over Guard: Stop all actions when either player is knocked out (life <= 0)
+        if p1.life <= 0 or p2.life <= 0:
+            return FighterAction(
+                direction=DirectionInput.NEUTRAL,
+                button=ButtonInput.NONE,
+                macro_intent=EgoCentricIntent.RETREAT,
+                forward_locked=True,
+                safe_back_zone=False,
+                is_reaction=True,
+                reaction_type="ROUND_OVER",
+                absolute_horizontal=0,
+                meta={"detail": "Round concluded (KO detected) - neutralizing all actions"},
+            )
 
         # 0. Altitude Ceiling Guardrail: Prevent out-of-bounds stage boundary clipping.
         # Note: Air combos within high aerial flight envelope (-750.0 to 0.0) are fully allowed
@@ -85,8 +100,8 @@ class SafetyGatekeeper:
                 },
             )
 
-        # 1. Anti-Air Reaction Guard: Opponent airborne and attacking above P1
-        if p2.pos.y < -30.0 and p2.is_attacking and snapshot.distance <= self.anti_air_distance:
+        # 1. Anti-Air Reaction Guard: Opponent airborne and attacking above grounded P1
+        if is_p1_grounded and p2.pos.y < -30.0 and p2.is_attacking and snapshot.distance <= self.anti_air_distance:
             abs_h = 0
             return FighterAction(
                 direction=DirectionInput.NEUTRAL,
@@ -102,12 +117,16 @@ class SafetyGatekeeper:
 
         # 2. Instant Block Guard: Opponent attacking directly in proximity (High/Low Mixup Defense)
         if p2.is_attacking and not safe_zone and snapshot.distance <= self.proximity_danger_threshold:
-            # 2D Fighter Standard: Default to Crouch Guard (DOWN_BACK) against ground attacks to block Low and Mid.
-            # Use Stand Guard (BACK) against airborne / overhead attacks.
-            if p2.pos.y >= -15.0:
+            # 2D Fighter Standard: Default to Crouch Guard (DOWN_BACK) against ground attacks only when P1 is grounded.
+            # When P1 is airborne, crouch block is impossible; must use air guard (BACK).
+            if is_p1_grounded and p2.pos.y >= -15.0:
                 guard_dir = DirectionInput.DOWN_BACK
                 reaction = "INSTANT_BLOCK_LOW"
                 detail = "Incoming ground hitbox in range - auto-blocking low (DOWN_BACK)"
+            elif not is_p1_grounded:
+                guard_dir = DirectionInput.BACK
+                reaction = "INSTANT_BLOCK_AIR"
+                detail = "Airborne fighter blocking incoming attack in mid-air (BACK)"
             else:
                 guard_dir = DirectionInput.BACK
                 reaction = "INSTANT_BLOCK_HIGH"
@@ -164,7 +183,7 @@ class SafetyGatekeeper:
             button = ButtonInput.LIGHT_PUNCH
         elif intent == EgoCentricIntent.ZONING:
             direction = DirectionInput.BACK if snapshot.distance < 120 else DirectionInput.NEUTRAL
-            button = ButtonInput.SPECIAL_1
+            button = ButtonInput.SPECIAL_1 if is_p1_grounded else ButtonInput.NONE
         elif intent == EgoCentricIntent.CROSS_UP:
             direction = DirectionInput.UP_FORWARD
             button = ButtonInput.MEDIUM_KICK

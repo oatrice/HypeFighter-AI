@@ -233,3 +233,55 @@ def test_altitude_ceiling_guardrail_prevents_offscreen_stall(gatekeeper):
     assert action.reaction_type == "ALTITUDE_CEILING_RECOVERY"
     assert action.direction in (DirectionInput.NEUTRAL, DirectionInput.DOWN)
     assert action.forward_locked is True
+
+
+def test_airborne_p1_cannot_crouch_block(gatekeeper):
+    # P1 is airborne at y = -35.0 (< -5.0).
+    # Opponent P2 attacks from ground (p2_y = 0.0) in proximity.
+    # Gatekeeper MUST NOT output DOWN_BACK when P1 is mid-air!
+    snapshot = create_snapshot(
+        p1_x=0.0, p1_y=-35.0, p1_facing=1, p1_movetype="I",
+        p2_x=50.0, p2_y=0.0, p2_facing=-1, p2_movetype="A"
+    )
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RUSHDOWN)
+
+    assert action.direction != DirectionInput.DOWN_BACK
+    assert action.direction == DirectionInput.BACK
+    assert action.reaction_type in ("INSTANT_BLOCK_AIR", "INSTANT_BLOCK_HIGH")
+
+
+def test_airborne_p1_anti_air_suppressed(gatekeeper):
+    # P1 is airborne at y = -30.0 (< -5.0).
+    # Opponent is airborne attacking overhead.
+    # P1 cannot execute a grounded anti-air punch while mid-air!
+    snapshot = create_snapshot(
+        p1_x=-20.0, p1_y=-30.0, p1_facing=1, p1_movetype="I",
+        p2_x=30.0, p2_y=-60.0, p2_facing=-1, p2_movetype="A"
+    )
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.ZONING)
+
+    # Anti-air should be suppressed or translated to air-safe guard
+    assert action.reaction_type != "ANTI_AIR"
+
+
+def test_ko_state_neutralizes_actions(gatekeeper):
+    # When P1 life is 0 (KO)
+    snapshot_p1_ko = create_snapshot(
+        p1_x=0.0, p1_y=0.0, p1_facing=1, p1_movetype="H", p1_life=0,
+        p2_x=50.0, p2_y=0.0, p2_facing=-1, p2_movetype="I", p2_life=500
+    )
+    action_p1_ko = gatekeeper.evaluate(snapshot_p1_ko, desired_intent=EgoCentricIntent.RUSHDOWN)
+    assert action_p1_ko.direction == DirectionInput.NEUTRAL
+    assert action_p1_ko.button == ButtonInput.NONE
+    assert action_p1_ko.reaction_type == "ROUND_OVER"
+
+    # When P2 life is 0 (KO)
+    snapshot_p2_ko = create_snapshot(
+        p1_x=0.0, p1_y=0.0, p1_facing=1, p1_movetype="I", p1_life=800,
+        p2_x=50.0, p2_y=0.0, p2_facing=-1, p2_movetype="H", p2_life=0
+    )
+    action_p2_ko = gatekeeper.evaluate(snapshot_p2_ko, desired_intent=EgoCentricIntent.RUSHDOWN)
+    assert action_p2_ko.direction == DirectionInput.NEUTRAL
+    assert action_p2_ko.button == ButtonInput.NONE
+    assert action_p2_ko.reaction_type == "ROUND_OVER"
+

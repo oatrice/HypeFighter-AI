@@ -29,14 +29,29 @@ class TacticalBrain:
         self.history: deque[MatchSnapshot] = deque(maxlen=self.max_frames)
         self.viewer_chat_queue: deque[str] = deque(maxlen=50)
         self.current_decision: Optional[TacticalDecision] = None
+        self.active_chat_command: Optional[str] = None
+        self.chat_reply_count: int = 0
+        self.chat_max_replies: int = 3
+        self.chat_received_frame: int = 0
 
     def ingest_snapshot(self, snapshot: MatchSnapshot):
         """Pushes latest 60Hz snapshot into the sliding window."""
         self.history.append(snapshot)
 
-    def ingest_chat_message(self, message: str):
+    def ingest_chat_message(self, message: str, frame: int = 0):
         """Pushes spectator coaching / cheer message."""
         self.viewer_chat_queue.append(message)
+        self.active_chat_command = message
+        self.chat_reply_count = 0
+        self.chat_received_frame = frame
+
+    def reset_round(self):
+        """Resets round state and clears active chat coaching commands."""
+        self.active_chat_command = None
+        self.chat_reply_count = 0
+        self.viewer_chat_queue.clear()
+        self.history.clear()
+        self.current_decision = None
 
     def summarize_window(self) -> Dict[str, Any]:
         """Produces a structured combat summary of the sliding window for SLM/LLM prompt."""
@@ -82,9 +97,40 @@ class TacticalBrain:
         whiffs = summary.get("whiffs_detected", 0)
         frame_mod = summary.get("window_frames", 0)
 
-        # Helper for audience reply
+        # 0. KO / Round-Over State (0 HP)
+        if p1_life <= 0:
+            thought = "จบการต่อสู้ เราพ่ายแพ้ในยกนี้"
+            return TacticalDecision(
+                stance="ko_defeat",
+                macro_intent=EgoCentricIntent.RETREAT,
+                thought=thought,
+                thought_bubble=thought,
+                internal_monologue="เราถูกน็อกเอาต์ (0 HP) ยกนี้สิ้นสุดลงแล้ว ต้องวิเคราะห์ความผิดพลาดและเตรียมพร้อมสำหรับยกถัดไป",
+                public_chat="ยกนี้ยอมรับความพ่ายแพ้... ยกหน้าเจอกันใหม่!",
+                audience_reply=None,
+                morale_boost=False,
+                confidence=1.0,
+            )
+
+        if p2_life <= 0:
+            thought = "KO! เราเป็นฝ่ายคว้าชัยชนะในยกนี้!"
+            return TacticalDecision(
+                stance="round_over",
+                macro_intent=EgoCentricIntent.RETREAT,
+                thought=thought,
+                thought_bubble=thought,
+                internal_monologue="คู่ต่อสู้ล้มลง (0 HP) KO ชนะยกนี้อย่างงดงาม รักษาฟอร์มและโมเมนตัมไว้!",
+                public_chat="เป็นแมตช์ที่ดุเดือดมาก ชัยชนะเป็นของเรา!",
+                audience_reply=None,
+                morale_boost=True,
+                confidence=1.0,
+            )
+
+        # Helper for audience reply with TTL and max-reply cap
         audience_reply = None
-        if latest_chat:
+        if self.active_chat_command and self.chat_reply_count < self.chat_max_replies:
+            latest_chat = self.active_chat_command
+            self.chat_reply_count += 1
             if any(w in latest_chat for w in ("สวน", "ตี", "ต่อย")):
                 audience_reply = f"@Chat: ได้ยินแล้ว! จัดไปตามคำสั่ง '{latest_chat}' ดักสวนเน้นๆ!"
             elif any(w in latest_chat for w in ("บุก", "ลุย", "เร็ว")):
@@ -93,6 +139,9 @@ class TacticalBrain:
                 audience_reply = f"@Chat: รับทราบ '{latest_chat}' กำลังตั้งการ์ดแน่น!"
             else:
                 audience_reply = f"@Chat: ขอบคุณคำแนะนำ '{latest_chat}' ปรับแผนตามนี้เลย!"
+
+            if self.chat_reply_count >= self.chat_max_replies:
+                self.active_chat_command = None
 
         # 1. Whiff Punish in Safe Back Zone
         if summary.get("safe_back_zone"):
@@ -119,7 +168,7 @@ class TacticalBrain:
             )
 
         # 2. Critical Clutch Defense (Low Health)
-        if p1_life < 250:
+        if 0 < p1_life < 250:
             thought = "เลือดเหลือน้อยแล้ว ตั้งการ์ดรอจังหวะสวน!"
             taunts = [
                 "อย่าเพิ่งคิดว่าจะชนะง่ายๆ นะเพื่อน เลือดยังไม่หมดก็ยังไม่แพ้!",

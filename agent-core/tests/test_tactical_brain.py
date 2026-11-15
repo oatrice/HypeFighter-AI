@@ -84,3 +84,43 @@ def test_dual_channel_among_us_cognition():
     # 4. Floating Thought Bubble Overlay:
     assert hasattr(decision, "thought_bubble")
     assert len(decision.thought_bubble) > 0
+
+
+def test_tactical_brain_ko_state_suppresses_motivation():
+    brain = TacticalBrain()
+    # P1 KO'd (0 HP)
+    p1 = PlayerState(id=1, life=0, pos=Position(x=0.0, y=0.0), facing=1, movetype="H")
+    p2 = PlayerState(id=2, life=450, pos=Position(x=100.0, y=0.0), facing=-1, movetype="I")
+    snap = MatchSnapshot(frame=1000, timestamp_ms=1000, distance=100.0, safe_back_zone=False, p1=p1, p2=p2)
+    brain.ingest_snapshot(snap)
+
+    summary = brain.summarize_window()
+    decision = brain.fallback_tactical_rule(summary)
+
+    # Must NOT say "เลือดยังไม่หมดก็ยังไม่แพ้" or treat 0 HP as active combat crisis
+    assert "เลือดยังไม่หมดก็ยังไม่แพ้" not in decision.public_chat
+    assert "วิกฤต! เลือดเราเหลือต่ำกว่า 25% (0 HP)" not in decision.internal_monologue
+    assert decision.stance in ("ko_defeat", "round_over")
+
+
+def test_tactical_brain_crowd_command_ttl_and_round_reset():
+    brain = TacticalBrain()
+    brain.ingest_chat_message("สวนหลังมันเลยลูกพี่3")
+
+    # Ingest active match snapshot
+    p1 = PlayerState(id=1, life=1000, pos=Position(x=0.0, y=0.0), facing=1)
+    p2 = PlayerState(id=2, life=1000, pos=Position(x=100.0, y=0.0), facing=-1)
+    snap = MatchSnapshot(frame=100, timestamp_ms=1000, distance=100.0, safe_back_zone=False, p1=p1, p2=p2)
+    brain.ingest_snapshot(snap)
+
+    summary = brain.summarize_window()
+    dec1 = brain.fallback_tactical_rule(summary)
+    assert dec1.audience_reply is not None
+    assert "สวนหลังมันเลยลูกพี่3" in dec1.audience_reply
+
+    # After replying max times (e.g. 3 times) or calling reset_round(), crowd reply should clear
+    brain.reset_round()
+    summary2 = brain.summarize_window()
+    dec2 = brain.fallback_tactical_rule(summary2)
+    assert dec2.audience_reply is None or dec2.audience_reply == ""
+
