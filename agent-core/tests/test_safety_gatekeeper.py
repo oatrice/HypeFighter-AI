@@ -172,16 +172,30 @@ def test_instant_block_when_opponent_attacking_in_proximity(gatekeeper):
     assert action.reaction_type == "INSTANT_BLOCK"
 
 
-def test_altitude_ceiling_guardrail_prevents_offscreen_stall(gatekeeper):
-    # P1 is high in the air near or above screen ceiling (p1_y = -240.0)
-    # High-level intent requests Cross_Up or continuing upward jump attacks
+def test_air_combos_allowed_at_high_altitude(gatekeeper):
+    # P1 is at y = -350.0 executing an air combo / juggle on airborne P2 in hitstun (movetype="H")
+    # Camera vertical follow + zoomout covers this height; Gatekeeper MUST NOT interrupt air combos!
     snapshot = create_snapshot(
-        p1_x=0.0, p1_y=-240.0, p1_facing=1, p1_movetype="A",
-        p2_x=30.0, p2_y=-230.0, p2_facing=-1, p2_movetype="H"
+        p1_x=0.0, p1_y=-350.0, p1_facing=1, p1_movetype="A",
+        p2_x=30.0, p2_y=-340.0, p2_facing=-1, p2_movetype="H"
+    )
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RUSHDOWN)
+
+    # Air combo should proceed normally without being forced into ALTITUDE_CEILING_RECOVERY
+    assert action.reaction_type != "ALTITUDE_CEILING_RECOVERY"
+    assert action.button == ButtonInput.LIGHT_PUNCH
+
+
+def test_altitude_ceiling_guardrail_prevents_offscreen_stall(gatekeeper):
+    # P1 breaches the extreme stage altitude bound (p1_y = -760.0 near stage bound -800.0)
+    # High-level intent requests continuing jump attacks
+    snapshot = create_snapshot(
+        p1_x=0.0, p1_y=-760.0, p1_facing=1, p1_movetype="A",
+        p2_x=30.0, p2_y=-750.0, p2_facing=-1, p2_movetype="H"
     )
     action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.CROSS_UP)
 
-    # Must detect altitude ceiling breach and enforce neutral recovery to fall back down
+    # Must detect extreme altitude ceiling breach and enforce neutral recovery to prevent engine clipping
     assert action.is_reaction is True
     assert action.reaction_type == "ALTITUDE_CEILING_RECOVERY"
     assert action.direction in (DirectionInput.NEUTRAL, DirectionInput.DOWN)

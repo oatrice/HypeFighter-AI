@@ -23,7 +23,7 @@ class SafetyGatekeeper:
         self,
         proximity_danger_threshold: float = 85.0,
         anti_air_distance: float = 120.0,
-        altitude_ceiling_threshold: float = -200.0,
+        altitude_ceiling_threshold: float = -750.0,
     ):
         self.proximity_danger_threshold = proximity_danger_threshold
         self.anti_air_distance = anti_air_distance
@@ -67,7 +67,9 @@ class SafetyGatekeeper:
         p2 = snapshot.p2
         safe_zone = self.is_in_safe_back_zone(p1, p2)
 
-        # 0. Altitude Ceiling Guardrail: Prevent aerial stalls and vertical off-screen drift
+        # 0. Altitude Ceiling Guardrail: Prevent out-of-bounds stage boundary clipping.
+        # Note: Air combos within high aerial flight envelope (-750.0 to 0.0) are fully allowed
+        # and kept visible via the dynamic camera vertical follow and zoomout.
         if p1.pos.y < self.altitude_ceiling_threshold:
             return FighterAction(
                 direction=DirectionInput.NEUTRAL,

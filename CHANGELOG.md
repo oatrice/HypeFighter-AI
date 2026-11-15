@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-11-15
+
+### Changed
+- Relaxed Safety Gatekeeper altitude threshold from `-200.0` to `-750.0`, allowing full aerial combos and juggling while ensuring camera tracking keeps fighters visible without premature recovery interrupts.
+- Set Shadow Rival (`shadow_kfm`, P2) default palette to Palette 3 (Red Gi, white headband) instead of Palette 6 (Green Gi).
+- Enabled global dynamic auto-zoom and vertical follow across all stages in `engine/save/config.ini` (`ForceStageAutoZoom = 1`, `ForceStageZoomout = 0.70`, `ForceStageZoomin = 1.10`) for universal multi-character support.
+- Updated `stage0.def` and `stage0-720.def` bounds to `-800` ceiling and full `verticalfollow = 1.0`.
+
+### Added
+- Unit test `test_air_combos_allowed_at_high_altitude` asserting air combos proceed uninterrupted at $y = -350.0$.
+- Auto-provisioning routine for `stages/tournament.def` inside `scripts/run_match.sh`.
+
 ## [0.1.1] - 2026-11-15
 
 ### Added

@@ -63,18 +63,27 @@ if [ ! -d "./chars/shadow_kfm" ]; then
     cp -r "./chars/kfm" "./chars/shadow_kfm"
     sed -i '' 's/name = "Kung Fu Man"/name = "Shadow KFM"/' "./chars/shadow_kfm/kfm.def"
     sed -i '' 's/displayname = "Kung Fu Man"/displayname = "Shadow Rival"/' "./chars/shadow_kfm/kfm.def"
-    sed -i '' 's/pal.defaults = 1,2,3,4/pal.defaults = 6,5,4,3/' "./chars/shadow_kfm/kfm.def"
+    sed -i '' 's/pal.defaults = 1,2,3,4/pal.defaults = 3,9,1,2/' "./chars/shadow_kfm/kfm.def"
     mv "./chars/shadow_kfm/kfm.def" "./chars/shadow_kfm/shadow_kfm.def"
 fi
 
-# Launch with custom fighter identities: FrameWhisper AI vs Shadow Rival
+if [ ! -f "./stages/tournament.def" ]; then
+    echo "Configuring FrameWhisper Tournament Arena stage..."
+    cp "./stages/stage0.def" "./stages/tournament.def"
+    sed -i '' 's/name = "Training Room"/name = "FrameWhisper Tournament Arena"/' "./stages/tournament.def"
+    sed -i '' 's/displayname = "Training Room"/displayname = "FrameWhisper Arena (Auto-Cam)"/' "./stages/tournament.def"
+    sed -i '' 's/boundhigh = -25/boundhigh = -800/' "./stages/tournament.def"
+    sed -i '' 's/verticalfollow = .2/verticalfollow = 1.0\nzoomout = 0.70\nzoomin = 1.10\nzoomspeed = 12\ntensionhigh = 80/' "./stages/tournament.def"
+fi
+
+# Launch with custom fighter identities: FrameWhisper AI vs Shadow Rival (Red Palette 3)
 ./I.K.E.M.E.N-Go.app/Contents/MacOS/Ikemen_GO_MacOSARM \
     -loadmotif \
     -p1 framewhisper \
     -p2 shadow_kfm \
     -p1.ai 8 \
     -p2.ai 8 \
-    -p2.color 6 \
+    -p2.color 3 \
     -s stages/tournament.def \
     -rounds 2 \
     -time 99 \
