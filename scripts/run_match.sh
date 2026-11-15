@@ -49,13 +49,32 @@ cd "$PROJECT_ROOT/engine"
 xattr -d com.apple.quarantine "./I.K.E.M.E.N-Go.app" 2>/dev/null || true
 chmod +x "./I.K.E.M.E.N-Go.app/Contents/MacOS/Ikemen_GO_MacOSARM" 2>/dev/null || true
 
-# Launch with -loadmotif to enter match immediately
+# Auto-provision distinct character identities if not yet present
+if [ ! -d "./chars/framewhisper" ]; then
+    echo "Configuring FrameWhisper AI character identity..."
+    cp -r "./chars/kfm" "./chars/framewhisper"
+    sed -i '' 's/name = "Kung Fu Man"/name = "FrameWhisper"/' "./chars/framewhisper/kfm.def"
+    sed -i '' 's/displayname = "Kung Fu Man"/displayname = "FrameWhisper AI"/' "./chars/framewhisper/kfm.def"
+    mv "./chars/framewhisper/kfm.def" "./chars/framewhisper/framewhisper.def"
+fi
+
+if [ ! -d "./chars/shadow_kfm" ]; then
+    echo "Configuring Shadow Rival character identity..."
+    cp -r "./chars/kfm" "./chars/shadow_kfm"
+    sed -i '' 's/name = "Kung Fu Man"/name = "Shadow KFM"/' "./chars/shadow_kfm/kfm.def"
+    sed -i '' 's/displayname = "Kung Fu Man"/displayname = "Shadow Rival"/' "./chars/shadow_kfm/kfm.def"
+    sed -i '' 's/pal.defaults = 1,2,3,4/pal.defaults = 6,5,4,3/' "./chars/shadow_kfm/kfm.def"
+    mv "./chars/shadow_kfm/kfm.def" "./chars/shadow_kfm/shadow_kfm.def"
+fi
+
+# Launch with custom fighter identities: FrameWhisper AI vs Shadow Rival
 ./I.K.E.M.E.N-Go.app/Contents/MacOS/Ikemen_GO_MacOSARM \
     -loadmotif \
-    -p1 kfm \
-    -p2 kfm \
+    -p1 framewhisper \
+    -p2 shadow_kfm \
     -p1.ai 8 \
     -p2.ai 8 \
+    -p2.color 6 \
     -s stages/tournament.def \
     -rounds 2 \
     -time 99 \
