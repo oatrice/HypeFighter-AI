@@ -27,12 +27,14 @@ def create_snapshot(
     p2_movetype="A",
     p1_life=1000,
     p2_life=1000,
+    p1_power=0,
+    p2_power=0,
 ) -> MatchSnapshot:
     p1 = PlayerState(
         id=1,
         life=p1_life,
         life_max=1000,
-        power=1000,
+        power=p1_power,
         power_max=3000,
         pos=Position(x=p1_x, y=p1_y),
         facing=p1_facing,
@@ -102,8 +104,22 @@ def test_guardrail_locks_forward_movement_and_forces_punish_in_place(gatekeeper)
     assert action.safe_back_zone is True
     assert action.macro_intent == EgoCentricIntent.HOLD_SAFE_PUNISH
     assert action.button == ButtonInput.HEAVY_PUNCH  # Punish button
+    assert action.reaction_type == "PUNISH_IN_PLACE"
     # Direction should be neutral, never forward towards enemy attack hitbox
     assert action.direction != DirectionInput.FORWARD
+
+
+def test_guardrail_executes_super_punish_when_power_meter_ready(gatekeeper):
+    # AI is in SAFE_BACK_ZONE with power >= 1000
+    snapshot = create_snapshot(p1_x=-50.0, p2_x=50.0, p2_facing=1, p2_movetype="A", p1_power=1000)
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RUSHDOWN)
+
+    assert action.forward_locked is True
+    assert action.safe_back_zone is True
+    assert action.is_reaction is True
+    assert action.reaction_type == "SUPER_PUNISH_IN_PLACE"
+    assert action.cmd == "TripleKFPalm"
+
 
 
 def test_ego_centric_relative_intent_retreat_facing_right(gatekeeper):
@@ -158,18 +174,35 @@ def test_anti_air_reaction_when_opponent_airborne_attacking(gatekeeper):
 
 
 def test_instant_block_when_opponent_attacking_in_proximity(gatekeeper):
-    # Opponent at x=50 facing left (-1) attacking toward P1 at x=0
+    # Opponent at x=50 facing left (-1) attacking toward P1 at x=0 from ground
     snapshot = create_snapshot(
         p1_x=0.0, p1_y=0.0, p1_facing=1, p1_movetype="I",
         p2_x=50.0, p2_y=0.0, p2_facing=-1, p2_movetype="A"
     )
     action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RUSHDOWN)
     
-    # Must activate defensive guard and lock forward
+    # Must activate crouching defensive guard (DOWN_BACK) and lock forward
+    assert action.forward_locked is True
+    assert action.direction == DirectionInput.DOWN_BACK
+    assert action.is_reaction is True
+    assert action.reaction_type == "INSTANT_BLOCK_LOW"
+
+
+def test_instant_block_high_guard_when_opponent_overhead_without_anti_air(gatekeeper):
+    # Opponent is airborne attacking (p2_y = -40) but outside anti-air distance (distance = 150 > 120)
+    # P1 should stand block (BACK)
+    snapshot = create_snapshot(
+        p1_x=0.0, p1_y=0.0, p1_facing=1, p1_movetype="I",
+        p2_x=150.0, p2_y=-40.0, p2_facing=-1, p2_movetype="A"
+    )
+    # Set danger proximity threshold high enough to trigger block
+    gk = SafetyGatekeeper(proximity_danger_threshold=160.0, anti_air_distance=120.0)
+    action = gk.evaluate(snapshot, desired_intent=EgoCentricIntent.RUSHDOWN)
+
     assert action.forward_locked is True
     assert action.direction == DirectionInput.BACK
     assert action.is_reaction is True
-    assert action.reaction_type == "INSTANT_BLOCK"
+    assert action.reaction_type == "INSTANT_BLOCK_HIGH"
 
 
 def test_air_combos_allowed_at_high_altitude(gatekeeper):

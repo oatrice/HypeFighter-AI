@@ -100,35 +100,56 @@ class SafetyGatekeeper:
                 meta={"detail": "Airborne attack detected overhead - executing anti-air punish"},
             )
 
-        # 2. Instant Block Guard: Opponent attacking directly in proximity
+        # 2. Instant Block Guard: Opponent attacking directly in proximity (High/Low Mixup Defense)
         if p2.is_attacking and not safe_zone and snapshot.distance <= self.proximity_danger_threshold:
-            abs_h = self._relative_to_absolute_horizontal(DirectionInput.BACK, p1.facing)
+            # 2D Fighter Standard: Default to Crouch Guard (DOWN_BACK) against ground attacks to block Low and Mid.
+            # Use Stand Guard (BACK) against airborne / overhead attacks.
+            if p2.pos.y >= -15.0:
+                guard_dir = DirectionInput.DOWN_BACK
+                reaction = "INSTANT_BLOCK_LOW"
+                detail = "Incoming ground hitbox in range - auto-blocking low (DOWN_BACK)"
+            else:
+                guard_dir = DirectionInput.BACK
+                reaction = "INSTANT_BLOCK_HIGH"
+                detail = "Incoming aerial hitbox in range - auto-blocking high (BACK)"
+
+            abs_h = self._relative_to_absolute_horizontal(guard_dir, p1.facing)
             return FighterAction(
-                direction=DirectionInput.BACK,
+                direction=guard_dir,
                 button=ButtonInput.NONE,
                 macro_intent=EgoCentricIntent.RETREAT,
                 forward_locked=True,
                 safe_back_zone=False,
                 is_reaction=True,
-                reaction_type="INSTANT_BLOCK",
+                reaction_type=reaction,
                 absolute_horizontal=abs_h,
-                meta={"detail": "Incoming hitbox in range - auto-blocking"},
+                meta={"detail": detail},
             )
 
         # 3. Spatial Hitbox Guardrail: Safe Back Zone Punishment
         if safe_zone:
             # Under NO circumstance may the AI walk forward into the enemy hitbox
-            # Lock forward movement and execute PUNISH_IN_PLACE!
+            # Lock forward movement and execute PUNISH_IN_PLACE or SUPER_PUNISH_IN_PLACE if meter ready!
+            super_cmd = "TripleKFPalm" if p1.power >= 1000 else None
+            reaction_type = "SUPER_PUNISH_IN_PLACE" if super_cmd else "PUNISH_IN_PLACE"
+            button = ButtonInput.NONE if super_cmd else ButtonInput.HEAVY_PUNCH
+            detail = (
+                "Enemy attack exposed back with >= 1000 power - executing Super Triple Kung Fu Palm!"
+                if super_cmd
+                else "Enemy attack exposed back - locking forward and punishing in place"
+            )
+
             return FighterAction(
                 direction=DirectionInput.NEUTRAL,
-                button=ButtonInput.HEAVY_PUNCH,
+                button=button,
+                cmd=super_cmd,
                 macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
                 forward_locked=True,
                 safe_back_zone=True,
                 is_reaction=True,
-                reaction_type="PUNISH_IN_PLACE",
+                reaction_type=reaction_type,
                 absolute_horizontal=0,
-                meta={"detail": "Enemy attack exposed back - locking forward and punishing in place"},
+                meta={"detail": detail},
             )
 
         # 4. Standard Relative Ego-Centric Intent Translation

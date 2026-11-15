@@ -1,0 +1,137 @@
+"""60Hz Deterministic Combo Macro Engine & Hit-Confirm Chaining.
+
+Monitors player hitstun and blockstun transitions to:
+1. Capitalize on confirmed attacks by executing multi-hit specials and Super moves.
+2. Abort unsafe strings if opponent blocks or whiffs.
+3. Dynamically spend power meter (>= 1000) for Super Hypers during confirmed punishes or clutch comebacks.
+"""
+from enum import Enum
+from typing import Optional
+import logging
+from agent_core.models.telemetry import (
+    MatchSnapshot,
+    FighterAction,
+    DirectionInput,
+    ButtonInput,
+    EgoCentricIntent,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class ComboState(str, Enum):
+    IDLE = "IDLE"
+    INITIATING = "INITIATING"
+    CONFIRMED = "CONFIRMED"
+
+
+class ComboEngine:
+    """Deterministic finite state machine for combo sequencing and hit-confirms."""
+
+    def __init__(self, timeout_frames: int = 30):
+        self.timeout_frames = timeout_frames
+        self.state: ComboState = ComboState.IDLE
+        self.current_step: int = 0
+        self.last_attack_frame: int = 0
+
+    def reset(self):
+        """Resets the combo engine to IDLE state."""
+        self.state = ComboState.IDLE
+        self.current_step = 0
+        self.last_attack_frame = 0
+
+    def update(self, snapshot: MatchSnapshot) -> Optional[FighterAction]:
+        """Evaluates match snapshot frame-by-frame and produces combo actions if applicable."""
+        p1 = snapshot.p1
+        p2 = snapshot.p2
+        frame = snapshot.frame
+
+        # 1. State: IDLE -> Transition to INITIATING on attack startup
+        if self.state == ComboState.IDLE:
+            if p1.is_attacking or p1.movetype == "A":
+                self.state = ComboState.INITIATING
+                self.current_step = 1
+                self.last_attack_frame = frame
+            return None
+
+        # 2. State: INITIATING -> Check for Hit-Confirm vs Block/Whiff
+        if self.state == ComboState.INITIATING:
+            if self.last_attack_frame == 0:
+                self.last_attack_frame = frame
+
+            # Check timeout
+            if frame - self.last_attack_frame > self.timeout_frames:
+                self.reset()
+                return None
+
+            # Case A: Hit Confirmed! (Opponent in hitstun)
+            if p2.is_hurt or p2.movetype == "H":
+                self.state = ComboState.CONFIRMED
+                self.current_step += 1
+
+                # Check Clutch Comeback (Low HP <= 40% and power >= 1000)
+                if p1.life <= 400 and p1.power >= 1000:
+                    return FighterAction(
+                        direction=DirectionInput.NEUTRAL,
+                        button=ButtonInput.NONE,
+                        cmd="TripleKFPalm",
+                        macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
+                        forward_locked=True,
+                        is_reaction=True,
+                        reaction_type="SUPER_HIT_CONFIRM_CLUTCH",
+                        absolute_horizontal=0,
+                        meta={"detail": "Clutch Super Hit-Confirm (Triple Kung Fu Palm)"},
+                    )
+
+                # Case B: Standard Super Move Finisher (Power >= 1000)
+                if p1.power >= 1000:
+                    return FighterAction(
+                        direction=DirectionInput.NEUTRAL,
+                        button=ButtonInput.NONE,
+                        cmd="TripleKFPalm",
+                        macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
+                        forward_locked=True,
+                        is_reaction=True,
+                        reaction_type="SUPER_HIT_CONFIRM",
+                        absolute_horizontal=0,
+                        meta={"detail": "Super Move Hit-Confirm (Triple Kung Fu Palm)"},
+                    )
+
+                # Case C: Meterless Special Move Chaining (Power < 1000)
+                return FighterAction(
+                    direction=DirectionInput.NEUTRAL,
+                    button=ButtonInput.HEAVY_PUNCH,
+                    cmd="QCF_x",
+                    macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
+                    forward_locked=True,
+                    is_reaction=True,
+                    reaction_type="SPECIAL_HIT_CONFIRM",
+                    absolute_horizontal=0,
+                    meta={"detail": "Meterless Special Hit-Confirm (Kung Fu Palm QCF_x)"},
+                )
+
+            # Case D: Attack whiffs or is blocked (P1 stopped attacking while P2 was never in hitstun)
+            if not p1.is_attacking and p1.movetype != "A" and p2.movetype != "H":
+                self.reset()
+                return FighterAction(
+                    direction=DirectionInput.DOWN_BACK,
+                    button=ButtonInput.NONE,
+                    macro_intent=EgoCentricIntent.RETREAT,
+                    forward_locked=True,
+                    is_reaction=True,
+                    reaction_type="COMBO_ABORT_BLOCK",
+                    absolute_horizontal=0,
+                    meta={"detail": "Attack blocked or whiffed - aborting combo into crouch guard"},
+                )
+
+            return None
+
+        # 3. State: CONFIRMED -> Combo finisher issued, wait for sequence resolution
+        if self.state == ComboState.CONFIRMED:
+            if not p2.is_hurt and p2.movetype != "H":
+                self.reset()
+            elif frame - self.last_attack_frame > self.timeout_frames:
+                self.reset()
+            return None
+
+        return None

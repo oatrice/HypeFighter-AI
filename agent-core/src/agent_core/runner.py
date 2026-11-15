@@ -8,6 +8,7 @@ from agent_core.models.telemetry import MatchSnapshot, EgoCentricIntent
 from agent_core.receiver.udp_receiver import TelemetryUDPReceiver
 from agent_core.controller.safety_gatekeeper import SafetyGatekeeper
 from agent_core.controller.action_sender import ActionUDPSender
+from agent_core.controller.combo_engine import ComboEngine
 from agent_core.tactician.tactical_brain import TacticalBrain
 
 
@@ -26,6 +27,7 @@ class MatchRunner:
         self.thought_file = "/tmp/framewhisper_thought.json"
         self.chat_file = "/tmp/framewhisper_chat.txt"
         self.gatekeeper = SafetyGatekeeper()
+        self.combo_engine = ComboEngine()
         self.action_sender = ActionUDPSender(target_port=action_port)
         self.tactical_brain = TacticalBrain()
         self.receiver = TelemetryUDPReceiver(port=telemetry_port, on_snapshot=self.on_snapshot)
@@ -77,6 +79,15 @@ class MatchRunner:
         # 60Hz deterministic safety gatekeeper evaluation
         action = self.gatekeeper.evaluate(snapshot, desired_intent=desired_intent)
 
+        # Combo Engine & Hit-Confirm Chaining (Overrides standard intent if combo active, unless blocking/recovery required)
+        if not action.is_reaction or action.reaction_type in ("PUNISH_IN_PLACE", "SUPER_PUNISH_IN_PLACE"):
+            combo_action = self.combo_engine.update(snapshot)
+            if combo_action is not None:
+                action = combo_action
+        else:
+            if action.reaction_type and action.reaction_type.startswith("INSTANT_BLOCK"):
+                self.combo_engine.reset()
+
         # Transmit concrete action back into Ikemen GO via UDP and atomic IPC fallback
         self.action_sender.send(action, frame=snapshot.frame)
         try:
@@ -98,14 +109,17 @@ class MatchRunner:
         if snapshot.frame % 30 == 0 or action.is_reaction or snapshot.p1.pos.y < -30 or snapshot.p2.pos.y < -30:
             p1_pos = f"({snapshot.p1.pos.x:.1f},{snapshot.p1.pos.y:.1f})"
             p2_pos = f"({snapshot.p2.pos.x:.1f},{snapshot.p2.pos.y:.1f})"
+            cmd_info = f" CMD:{action.cmd}" if action.cmd else ""
             print(
-                f"[F:{snapshot.frame:05d}] P1:{snapshot.p1.life:04d} {p1_pos} | "
+                f"[F:{snapshot.frame:05d}] P1:{snapshot.p1.life:04d} {p1_pos} (P:{snapshot.p1.power}) | "
                 f"P2:{snapshot.p2.life:04d} {p2_pos} | "
                 f"Dist:{snapshot.distance:.1f} | "
-                f"Action:{action.reaction_type or action.macro_intent.value} [{action.button.value}]"
+                f"Action:{action.reaction_type or action.macro_intent.value} [{action.button.value}]{cmd_info}"
                 f"{cam_info}",
                 flush=True,
             )
+            if action.cmd:
+                print(f"  💥 [COMBO/SUPER EXECUTION]: {action.cmd} (Reaction: {action.reaction_type})", flush=True)
             # Display dual-channel thought stream every 60 frames (1 second) or when reaction occurs
             if self._latest_decision and (snapshot.frame % 60 == 0 or action.is_reaction):
                 dec = self._latest_decision

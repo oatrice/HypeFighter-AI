@@ -16,6 +16,7 @@ def test_action_sender_payload_serialization():
     action = FighterAction(
         direction=DirectionInput.BACK,
         button=ButtonInput.HEAVY_PUNCH,
+        cmd="TripleKFPalm",
         macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
         forward_locked=True,
         safe_back_zone=True,
@@ -28,6 +29,7 @@ def test_action_sender_payload_serialization():
     assert payload_dict["frame"] == 105
     assert payload_dict["dir"] == "BACK"
     assert payload_dict["btn"] == "HP"
+    assert payload_dict["cmd"] == "TripleKFPalm"
     assert payload_dict["h_axis"] == -1
     assert payload_dict["f_lock"] is True
     assert payload_dict["reaction"] == "PUNISH_IN_PLACE"
