@@ -337,10 +337,13 @@ function bridge.tick(p1_arg, p2_arg, engine_meta)
         telemetry_udp:send(payload)
     end
 
-    local f = io.open(bridge.config.telemetry_file, "w")
+    local tmp_file = bridge.config.telemetry_file .. ".tmp"
+    local f = io.open(tmp_file, "w")
     if f then
         f:write(payload)
+        f:flush()
         f:close()
+        os.rename(tmp_file, bridge.config.telemetry_file)
     end
 
     return snapshot

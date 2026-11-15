@@ -8,5 +8,5 @@ if [ -z "$MSG" ]; then
     exit 1
 fi
 
-echo "$MSG" > /tmp/framewhisper_chat.txt
+echo "$MSG" >> /tmp/framewhisper_chat.txt
 echo "✅ ส่งข้อความโค้ช: \"$MSG\" เข้าสู่เกมเรียบร้อย!"

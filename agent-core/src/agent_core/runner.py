@@ -40,15 +40,18 @@ class MatchRunner:
         self._last_processed_frame = snapshot.frame
         self._frame_count += 1
 
-        # Check for live spectator chat coaching from file
+        # Check for live spectator chat coaching from file (supports multiple queued messages)
         if os.path.exists(self.chat_file):
             try:
-                with open(self.chat_file, "r") as f:
-                    msg = f.read().strip()
-                if msg:
-                    self.tactical_brain.ingest_chat_message(msg)
+                with open(self.chat_file, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                if content:
                     os.remove(self.chat_file)
-                    print(f"\n📩 [Live Chat Ingested]: \"{msg}\"", flush=True)
+                    for line in content.splitlines():
+                        line = line.strip()
+                        if line:
+                            self.tactical_brain.ingest_chat_message(line)
+                            print(f"\n📩 [Live Chat Ingested]: \"{line}\"", flush=True)
             except Exception:
                 pass
 
@@ -62,22 +65,26 @@ class MatchRunner:
             desired_intent = decision.macro_intent
             self._latest_decision = decision
 
-            # Write out thought state for Floating Thought Bubble overlay
+            # Write out thought state atomically for Floating Thought Bubble overlay
             try:
-                with open(self.thought_file, "w") as f:
+                tmp_thought = self.thought_file + ".tmp"
+                with open(tmp_thought, "w", encoding="utf-8") as f:
                     f.write(decision.model_dump_json())
+                os.replace(tmp_thought, self.thought_file)
             except Exception:
                 pass
 
         # 60Hz deterministic safety gatekeeper evaluation
         action = self.gatekeeper.evaluate(snapshot, desired_intent=desired_intent)
 
-        # Transmit concrete action back into Ikemen GO via UDP and IPC fallback
+        # Transmit concrete action back into Ikemen GO via UDP and atomic IPC fallback
         self.action_sender.send(action, frame=snapshot.frame)
         try:
             action_dict = self.action_sender.serialize_action(action, frame=snapshot.frame)
-            with open(self.action_file, "w") as f:
+            tmp_act = self.action_file + ".tmp"
+            with open(tmp_act, "w", encoding="utf-8") as f:
                 f.write(json.dumps(action_dict))
+            os.replace(tmp_act, self.action_file)
         except Exception:
             pass
 
@@ -123,7 +130,7 @@ class MatchRunner:
                         self.on_snapshot(snap)
                 except Exception:
                     pass
-            await asyncio.sleep(0.016)  # ~60Hz poll
+            await asyncio.sleep(0.005)  # Fast 200Hz poll to prevent frame skipping
 
     async def start(self):
         self.running = True

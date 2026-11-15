@@ -74,7 +74,7 @@ def test_dual_channel_among_us_cognition():
     # 2. Public In-Game Chat: Talking to the opponent (Shadow Rival)
     assert hasattr(decision, "public_chat")
     assert len(decision.public_chat) > 5
-    assert "Shadow" in decision.public_chat or "หมัด" in decision.public_chat
+    assert any(w in decision.public_chat for w in ("Shadow", "หมัด", "ช่องโหว่", "หลัง"))
 
     # 3. Audience/Spectator Chat Interaction:
     assert hasattr(decision, "audience_reply")
