@@ -23,6 +23,8 @@ class MatchRunner:
         self.action_port = action_port
         self.telemetry_file = telemetry_file
         self.action_file = action_file
+        self.thought_file = "/tmp/framewhisper_thought.json"
+        self.chat_file = "/tmp/framewhisper_chat.txt"
         self.gatekeeper = SafetyGatekeeper()
         self.action_sender = ActionUDPSender(target_port=action_port)
         self.tactical_brain = TacticalBrain()
@@ -30,12 +32,25 @@ class MatchRunner:
         self.running = False
         self._last_processed_frame = -1
         self._frame_count = 0
+        self._latest_decision = None
 
     def on_snapshot(self, snapshot: MatchSnapshot):
         if snapshot.frame == self._last_processed_frame:
             return
         self._last_processed_frame = snapshot.frame
         self._frame_count += 1
+
+        # Check for live spectator chat coaching from file
+        if os.path.exists(self.chat_file):
+            try:
+                with open(self.chat_file, "r") as f:
+                    msg = f.read().strip()
+                if msg:
+                    self.tactical_brain.ingest_chat_message(msg)
+                    os.remove(self.chat_file)
+            except Exception:
+                pass
+
         self.tactical_brain.ingest_snapshot(snapshot)
 
         # Periodically consult tactical brain (every ~20 frames / 3Hz)
@@ -44,6 +59,14 @@ class MatchRunner:
             summary = self.tactical_brain.summarize_window()
             decision = self.tactical_brain.fallback_tactical_rule(summary)
             desired_intent = decision.macro_intent
+            self._latest_decision = decision
+
+            # Write out thought state for Floating Thought Bubble overlay
+            try:
+                with open(self.thought_file, "w") as f:
+                    f.write(decision.model_dump_json())
+            except Exception:
+                pass
 
         # 60Hz deterministic safety gatekeeper evaluation
         action = self.gatekeeper.evaluate(snapshot, desired_intent=desired_intent)
@@ -75,6 +98,13 @@ class MatchRunner:
                 f"{cam_info}",
                 flush=True,
             )
+            # Display dual-channel thought stream every 60 frames (1 second) or when reaction occurs
+            if self._latest_decision and (snapshot.frame % 60 == 0 or action.is_reaction):
+                dec = self._latest_decision
+                print(f"  🧠 [P1 Private Mind]: \"{dec.internal_monologue}\"", flush=True)
+                print(f"  💬 [P1 In-Game Chat]: \"{dec.public_chat}\"", flush=True)
+                if dec.audience_reply:
+                    print(f"  📣 [P1 Crowd Reply]: \"{dec.audience_reply}\"", flush=True)
 
     async def _poll_file_fallback(self):
         """Polls IPC telemetry file if UDP packets are not arriving."""

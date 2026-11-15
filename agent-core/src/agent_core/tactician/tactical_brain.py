@@ -10,9 +10,13 @@ from agent_core.models.telemetry import EgoCentricIntent, MatchSnapshot
 
 
 class TacticalDecision(BaseModel):
-    stance: str  # e.g., "whiff_punish", "zoning_keepout", "crossup_pressure"
+    stance: str  # e.g., "whiff_punish", "zoning_keepout", "crossup_pressure", "clutch_comeback"
     macro_intent: EgoCentricIntent
     thought: str  # e.g., "เขาต่อยไปทางขวาเปิดหลังโล่ง สวนกลับตรงนี้เลย!"
+    internal_monologue: str = ""  # Private internal monologue / CoT in head (Among Us private chat)
+    public_chat: str = ""  # Public in-game chat to opponents/all players (Among Us game chat)
+    audience_reply: Optional[str] = None  # Reply to viewer coaching
+    thought_bubble: str = ""  # Concise text for floating thought bubble overlay
     morale_boost: bool = False
     confidence: float = 1.0
 
@@ -69,29 +73,58 @@ class TacticalBrain:
         }
 
     def fallback_tactical_rule(self, summary: Dict[str, Any]) -> TacticalDecision:
-        """Fast heuristic fallback when local SLM is idle or loading."""
+        """Fast heuristic fallback with dual-channel cognition (Private Inner Mind vs Public Chat)."""
+        recent_chat = summary.get("recent_chat", [])
+        latest_chat = recent_chat[-1] if recent_chat else None
+        dist = summary.get("current_distance", 100.0)
+
         if summary.get("safe_back_zone"):
+            thought = "ศัตรูต่อยไปทางเปิดหลังโล่ง สวนกลับตรงนี้เลย!"
             return TacticalDecision(
                 stance="whiff_punish",
                 macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
-                thought="ศัตรูต่อยไปทางเปิดหลังโล่ง สวนกลับตรงนี้เลย!",
+                thought=thought,
+                thought_bubble=thought,
+                internal_monologue=(
+                    f"ตรวจพบจังหวะเปิดหลัง! P2 กำลังออกหมัดไปข้างหน้า แต่ตำแหน่งของเราอยู่อีกฝั่งอย่างปลอดภัย "
+                    f"ระยะห่าง {dist:.1f}px ฮิตบ็อกซ์ของเขาไม่ถึงเรา สัญชาตญาณความปลอดภัยล็อกไม่ให้เดินหน้า "
+                    f"ฉวยโอกาสลงโทษด้วยหมัดหนักตรงนี้ทันที!"
+                ),
+                public_chat="หมัดวืดไปไกลเลยนะ Shadow! หลังเปิดโล่งแบบนี้เสร็จแน่!",
+                audience_reply=f"@Chat: รับทราบตามที่บอก '{latest_chat}'! ดักสวนจังหวะวืดเน้นๆ!" if latest_chat else None,
                 morale_boost=True,
                 confidence=0.95,
             )
 
         if summary.get("p1_life", 1000) < 250:
+            thought = "เลือดเหลือน้อยแล้ว ตั้งการ์ดรอจังหวะสวน!"
             return TacticalDecision(
                 stance="clutch_defense",
                 macro_intent=EgoCentricIntent.RETREAT,
-                thought="เลือดเหลือน้อยแล้ว ตั้งการ์ดรอจังหวะสวน!",
+                thought=thought,
+                thought_bubble=thought,
+                internal_monologue=(
+                    f"วิกฤต! เลือดเราเหลือต่ำกว่า 25% ({summary.get('p1_life')} HP) P2 กำลังกดดันอย่างหนัก "
+                    f"ห้ามเสี่ยงเปิดหน้าแลกเด็ดขาด ต้องถอยคุมระยะ ตั้งการ์ดแน่น รอจับจังหวะเขาหลุดคอมโบเพื่อพลิกเกม!"
+                ),
+                public_chat="อย่าเพิ่งคิดว่าจะชนะง่ายๆ นะเพื่อน เลือดยังไม่หมดก็ยังไม่แพ้!",
+                audience_reply=f"@Chat: '{latest_chat}' - กำลังตั้งรับ เลือดน้อยขอปลอดภัยไว้ก่อน!" if latest_chat else None,
                 morale_boost=False,
                 confidence=0.8,
             )
 
+        thought = "คุมระยะให้ดี รอจับจังหวะเขาพลาด"
         return TacticalDecision(
             stance="neutral_footsies",
             macro_intent=EgoCentricIntent.ZONING,
-            thought="คุมระยะให้ดี รอจับจังหวะเขาพลาด",
+            thought=thought,
+            thought_bubble=thought,
+            internal_monologue=(
+                f"สถานการณ์สมดุล ระยะห่าง {dist:.1f}px รักษาพื้นที่คุมจังหวะ Zoning ดูเชิงการเดินของ P2 "
+                f"รอให้เขาเป็นฝ่ายเปิดช่องโหว่ก่อน"
+            ),
+            public_chat="เข้ามาเลย Shadow อยากดูว่าจะงัดท่าไหนออกมา!",
+            audience_reply=f"@Chat: ขอบคุณคำแนะนำ '{latest_chat}' กำลังดูเชิงอยู่!" if latest_chat else None,
             morale_boost=False,
             confidence=0.7,
         )
