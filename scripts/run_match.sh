@@ -10,7 +10,10 @@ echo "🥊 Starting FrameWhisper Match Spectator (Ikemen GO + AI)"
 echo "============================================================"
 
 # Clean previous temp files
-rm -f /tmp/framewhisper_telemetry.json /tmp/framewhisper_action.json
+rm -f /tmp/framewhisper_telemetry.json /tmp/framewhisper_action.json /tmp/framewhisper_thought.json /tmp/framewhisper_chat.txt
+
+echo "💡 [Tip] ส่งแชทโค้ชสดระหว่างสู้: ./scripts/chat.sh สวนหลังเลยพี่"
+echo "💡 [Tip] ดูความคิดสดในอีก Terminal: ./scripts/watch_thoughts.sh"
 
 # 1. Activate Python Environment
 cd "$PROJECT_ROOT/agent-core"
