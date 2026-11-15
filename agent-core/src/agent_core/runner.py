@@ -113,6 +113,12 @@ class MatchRunner:
             if action.direction == DirectionInput.DOWN_BACK:
                 action.direction = DirectionInput.BACK
 
+        # Fail-Safe Gate: Strip any invalid COMBO_ABORT_BLOCK outside strict conditions
+        if action.reaction_type == "COMBO_ABORT_BLOCK":
+            if snapshot.p1.pos.y < -5.0 or snapshot.p2.pos.y < -5.0 or snapshot.distance > 130.0:
+                action.reaction_type = None
+                action.is_reaction = False
+
         # Transmit concrete action back into Ikemen GO via UDP and atomic IPC fallback
         self.action_sender.send(action, frame=snapshot.frame)
         try:
@@ -166,10 +172,57 @@ class MatchRunner:
 
             if self._latest_decision and should_display_thought:
                 dec = self._latest_decision
-                # Sync fresh frame distance into monologue
-                monologue = re.sub(r"(\d+(?:\.\d+)?)\s*px", f"{snapshot.distance:.1f}px", dec.internal_monologue)
+                dist_str = f"{snapshot.distance:.1f}px"
+
+                # Feature 3: Reaction-synced Private Mind & In-Game Chat
+                if action.is_reaction and action.reaction_type:
+                    rtype = action.reaction_type
+                    if rtype == "SPECIAL_HIT_CONFIRM":
+                        monologue = f"หมัดหนักเข้าเป้าในระยะ {dist_str}! ต่อคอมโบ Kung Fu Palm (QCF_x) ตามน้ำทันที!"
+                        chat = "รับหมัดฝ่ามือ Kung Fu Palm นี้ไปซะ!"
+                    elif rtype in ("SUPER_HIT_CONFIRM", "SUPER_HIT_CONFIRM_CLUTCH"):
+                        monologue = f"จังหวะปิดเกม! เกจพลังเต็มเปี่ยมในระยะ {dist_str} ปล่อยไม้ตาย Triple Kung Fu Palm เผด็จศึก!"
+                        chat = "จบแมตช์นี้กันเลย! รับไปซะ ท่าไม้ตายสูงสุด!"
+                    elif rtype == "SUPER_PUNISH_IN_PLACE":
+                        monologue = f"ศัตรูเปิดหลังโล่งในระยะ {dist_str}! สวนกลับด้วยท่าไม้ตาย Triple Kung Fu Palm ทันที!"
+                        chat = "เปิดช่องโหว่ด้านหลังเองนะ... รับหมัดเด็ดไป!"
+                    elif rtype == "PUNISH_IN_PLACE":
+                        monologue = f"ศัตรูเปิดหลังโล่งในระยะ {dist_str}! ล็อกทิศทางสวนกลับลงโทษอยู่กับที่!"
+                        chat = "ช่องโหว่บานเบอะ โดนสวนแน่!"
+                    elif rtype == "ANTI_AIR":
+                        monologue = f"ศัตรูกระโดดเข้ามาในระยะ {dist_str}! ดักสอยกลางอากาศด้วยหมัดหนักสกัดทาง (Anti-Air)!"
+                        chat = "อย่าริอาจกระโดดเข้ามาสุ่มสี่สุ่มห้า!"
+                    elif rtype == "COMBO_ABORT_BLOCK":
+                        monologue = f"คู่ต่อสู้ตั้งการ์ดแน่นในระยะ {dist_str}! สั่งยกเลิกคอมโบถอยตั้งการ์ดทันที ไม่เปิดช่องโดนสวน!"
+                        chat = "บล็อกได้งั้นเหรอ... ถอยมาตั้งหลักก่อน!"
+                    elif rtype == "INSTANT_BLOCK_LOW":
+                        monologue = f"ตรวจพบการโจมตีระดับล่างในระยะ {dist_str}! สลับตั้งการ์ดล่าง (Crouch Guard) ทันที!"
+                        chat = "กวาดล่างมาเหรอ... อ่านออกหมดแล้ว!"
+                    elif rtype == "INSTANT_BLOCK_HIGH":
+                        monologue = f"ตรวจพบการโจมตีระดับบนในระยะ {dist_str}! สลับตั้งการ์ดบน (High Guard) ป้องกันศีรษะ!"
+                        chat = "การ์ดสูงแน่นหนา ไม่ผ่านหรอก!"
+                    elif rtype == "INSTANT_BLOCK_AIR":
+                        monologue = f"ลอยตัวกลางอากาศในระยะ {dist_str}! ตั้งการ์ดกลางอากาศ (Air Guard) รับมือ!"
+                        chat = "กลางอากาศก็การ์ดได้!"
+                    elif rtype == "ALTITUDE_CEILING_RECOVERY":
+                        monologue = f"ระดับความสูง {snapshot.p1.pos.y:.1f} ใกล้เพดานเวที! ปล่อยตัวลงตามแรงโน้มถ่วงเพื่อความปลอดภัย"
+                        chat = "ปรับระดับความสูงลงมาตั้งหลัก"
+                    elif rtype == "ROUND_OVER":
+                        if snapshot.p1.life <= 0:
+                            monologue = f"พ่ายแพ้ในยกนี้ที่ระยะ {dist_str} เตรียมวางแผนแก้เกมในยกถัดไป"
+                            chat = "ยังไม่จบแค่นี้หรอก... ยกหน้าเจอกันใหม่!"
+                        else:
+                            monologue = f"น็อกคู่ต่อสู้สำเร็จที่ระยะ {dist_str}! ปิดฉากยกได้อย่างเด็ดขาด"
+                            chat = "เป็นไปตามแผน! ชัยชนะเป็นของเรา!"
+                    else:
+                        monologue = re.sub(r"(\d+(?:\.\d+)?)\s*px", dist_str, dec.internal_monologue)
+                        chat = dec.public_chat
+                else:
+                    monologue = re.sub(r"(\d+(?:\.\d+)?)\s*px", dist_str, dec.internal_monologue)
+                    chat = dec.public_chat
+
                 print(f"  🧠 [P1 Private Mind]: \"{monologue}\"", flush=True)
-                print(f"  💬 [P1 In-Game Chat]: \"{dec.public_chat}\"", flush=True)
+                print(f"  💬 [P1 In-Game Chat]: \"{chat}\"", flush=True)
                 if dec.audience_reply:
                     print(f"  📣 [P1 Crowd Reply]: \"{dec.audience_reply}\"", flush=True)
 

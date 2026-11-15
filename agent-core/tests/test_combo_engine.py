@@ -21,6 +21,8 @@ def make_snapshot(
     p2_movetype="H",
     distance=40.0,
     frame=100,
+    p1_y=0.0,
+    p2_y=0.0,
 ) -> MatchSnapshot:
     p1 = PlayerState(
         id=1,
@@ -28,7 +30,7 @@ def make_snapshot(
         life_max=1000,
         power=p1_power,
         power_max=3000,
-        pos=Position(x=0.0, y=0.0),
+        pos=Position(x=0.0, y=p1_y),
         facing=1,
         stateno=200,
         movetype=p1_movetype,
@@ -40,7 +42,7 @@ def make_snapshot(
         life_max=1000,
         power=p2_power,
         power_max=3000,
-        pos=Position(x=40.0, y=0.0),
+        pos=Position(x=40.0, y=p2_y),
         facing=-1,
         stateno=5000,  # Standard hitstun state
         movetype=p2_movetype,
@@ -151,6 +153,49 @@ def test_no_combo_abort_block_when_opponent_not_guarding():
     assert engine.state == ComboState.IDLE
     if action is not None:
         assert action.reaction_type != "COMBO_ABORT_BLOCK"
+
+
+def test_no_combo_abort_block_when_p2_airborne():
+    engine = ComboEngine()
+    # P1 attacks on ground at close range
+    snap1 = make_snapshot(p1_movetype="A", p2_movetype="I", distance=50.0, p1_y=0.0, p2_y=0.0, frame=1)
+    engine.update(snap1)
+
+    # P2 is airborne (y = -35.0 < -5.0) and in air-guard state (stateno 152)
+    snap2 = make_snapshot(p1_movetype="I", p2_movetype="H", distance=50.0, p1_y=0.0, p2_y=-35.0, frame=15)
+    snap2.p2.stateno = 152
+    action = engine.update(snap2)
+
+    # Must NOT return COMBO_ABORT_BLOCK when P2 is airborne; must reset quietly to IDLE
+    assert engine.state == ComboState.IDLE
+    assert action is None
+
+
+def test_no_combo_abort_block_when_p1_airborne():
+    engine = ComboEngine()
+    # P1 is airborne (y = -20.0 < -5.0) and attacks
+    snap1 = make_snapshot(p1_movetype="A", p2_movetype="I", distance=50.0, p1_y=-20.0, p2_y=0.0, frame=1)
+    engine.update(snap1)
+
+    # P2 guards on ground (stateno 150)
+    snap2 = make_snapshot(p1_movetype="I", p2_movetype="H", distance=50.0, p1_y=-20.0, p2_y=0.0, frame=15)
+    snap2.p2.stateno = 150
+    action = engine.update(snap2)
+
+    # Must NOT return COMBO_ABORT_BLOCK when P1 is airborne; must reset quietly to IDLE
+    assert engine.state == ComboState.IDLE
+    assert action is None
+
+
+def test_combo_engine_does_not_initiate_at_long_range():
+    engine = ComboEngine()
+    # P1 throws zoning projectile at distance 250px (> 130px)
+    snap1 = make_snapshot(p1_movetype="A", p2_movetype="I", distance=250.0, frame=1)
+    action = engine.update(snap1)
+
+    # Engine must NOT initiate close-combat combo at long range
+    assert engine.state == ComboState.IDLE
+    assert action is None
 
 
 

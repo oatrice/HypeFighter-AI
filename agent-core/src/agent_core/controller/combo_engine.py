@@ -46,9 +46,9 @@ class ComboEngine:
         p2 = snapshot.p2
         frame = snapshot.frame
 
-        # 1. State: IDLE -> Transition to INITIATING on attack startup
+        # 1. State: IDLE -> Transition to INITIATING on attack startup in close combat range
         if self.state == ComboState.IDLE:
-            if p1.is_attacking or p1.movetype == "A":
+            if (p1.is_attacking or p1.movetype == "A") and snapshot.distance <= 130.0:
                 self.state = ComboState.INITIATING
                 self.current_step = 1
                 self.last_attack_frame = frame
@@ -65,24 +65,28 @@ class ComboEngine:
                 return None
 
             is_p1_grounded = p1.pos.y >= -5.0
+            is_p2_grounded = p2.pos.y >= -5.0
             is_p2_reachable = p2.pos.y >= -80.0
-            is_p2_guarding = (120 <= p2.stateno <= 155)
+            is_p2_guarding = (120 <= p2.stateno <= 155 and (p2.movetype == "H" or p2.is_hurt))
             is_p2_hit = (p2.is_hurt or p2.movetype == "H") and not is_p2_guarding
 
-            # Case A: Real Blockstun Detected in combat range (120 <= stateno <= 155)
-            if is_p2_guarding and snapshot.distance <= 130.0:
+            # Case A: Real Blockstun in Close Ground Combat (Requires ALL 5 strict conditions)
+            if is_p2_guarding:
                 self.reset()
-                guard_dir = DirectionInput.DOWN_BACK if is_p1_grounded else DirectionInput.BACK
-                return FighterAction(
-                    direction=guard_dir,
-                    button=ButtonInput.NONE,
-                    macro_intent=EgoCentricIntent.RETREAT,
-                    forward_locked=True,
-                    is_reaction=True,
-                    reaction_type="COMBO_ABORT_BLOCK",
-                    absolute_horizontal=0,
-                    meta={"detail": f"Opponent blocked attack (stateno={p2.stateno}) - aborting combo into guard"},
-                )
+                # Strict 5 conditions: Active state, Dist <= 130, Grounded P1, Grounded P2, True Guard State
+                if snapshot.distance <= 130.0 and is_p1_grounded and is_p2_grounded:
+                    return FighterAction(
+                        direction=DirectionInput.DOWN_BACK,
+                        button=ButtonInput.NONE,
+                        macro_intent=EgoCentricIntent.RETREAT,
+                        forward_locked=True,
+                        is_reaction=True,
+                        reaction_type="COMBO_ABORT_BLOCK",
+                        absolute_horizontal=0,
+                        meta={"detail": f"Opponent blocked attack (stateno={p2.stateno}) - aborting combo into ground guard"},
+                    )
+                # If any condition fails (airborne or distant), reset quietly without COMBO_ABORT_BLOCK
+                return None
 
             # Case B: Hit Confirmed! (Opponent in true hitstun, not guarding)
             if is_p2_hit:
