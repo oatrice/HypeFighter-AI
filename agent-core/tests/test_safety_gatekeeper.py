@@ -170,3 +170,19 @@ def test_instant_block_when_opponent_attacking_in_proximity(gatekeeper):
     assert action.direction == DirectionInput.BACK
     assert action.is_reaction is True
     assert action.reaction_type == "INSTANT_BLOCK"
+
+
+def test_altitude_ceiling_guardrail_prevents_offscreen_stall(gatekeeper):
+    # P1 is high in the air near or above screen ceiling (p1_y = -240.0)
+    # High-level intent requests Cross_Up or continuing upward jump attacks
+    snapshot = create_snapshot(
+        p1_x=0.0, p1_y=-240.0, p1_facing=1, p1_movetype="A",
+        p2_x=30.0, p2_y=-230.0, p2_facing=-1, p2_movetype="H"
+    )
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.CROSS_UP)
+
+    # Must detect altitude ceiling breach and enforce neutral recovery to fall back down
+    assert action.is_reaction is True
+    assert action.reaction_type == "ALTITUDE_CEILING_RECOVERY"
+    assert action.direction in (DirectionInput.NEUTRAL, DirectionInput.DOWN)
+    assert action.forward_locked is True

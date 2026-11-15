@@ -1,5 +1,7 @@
 # Environment & Agents
 .agents/
+adlc/
+engine/
 .venv/
 env/
 venv/

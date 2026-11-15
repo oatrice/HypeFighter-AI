@@ -19,9 +19,15 @@ from agent_core.models.telemetry import (
 class SafetyGatekeeper:
     """Zero-latency reactive safety guardrail running at 60 FPS."""
 
-    def __init__(self, proximity_danger_threshold: float = 85.0, anti_air_distance: float = 120.0):
+    def __init__(
+        self,
+        proximity_danger_threshold: float = 85.0,
+        anti_air_distance: float = 120.0,
+        altitude_ceiling_threshold: float = -200.0,
+    ):
         self.proximity_danger_threshold = proximity_danger_threshold
         self.anti_air_distance = anti_air_distance
+        self.altitude_ceiling_threshold = altitude_ceiling_threshold
 
     def is_in_safe_back_zone(self, p1: PlayerState, p2: PlayerState) -> bool:
         """Determines if AI (P1) is behind the attacking opponent (P2) relative to P2's attack direction.
@@ -60,6 +66,22 @@ class SafetyGatekeeper:
         p1 = snapshot.p1
         p2 = snapshot.p2
         safe_zone = self.is_in_safe_back_zone(p1, p2)
+
+        # 0. Altitude Ceiling Guardrail: Prevent aerial stalls and vertical off-screen drift
+        if p1.pos.y < self.altitude_ceiling_threshold:
+            return FighterAction(
+                direction=DirectionInput.NEUTRAL,
+                button=ButtonInput.NONE,
+                macro_intent=EgoCentricIntent.RETREAT,
+                forward_locked=True,
+                safe_back_zone=False,
+                is_reaction=True,
+                reaction_type="ALTITUDE_CEILING_RECOVERY",
+                absolute_horizontal=0,
+                meta={
+                    "detail": f"Fighter altitude ({p1.pos.y}) breached ceiling ({self.altitude_ceiling_threshold}) - neutralizing upward inputs for gravity recovery"
+                },
+            )
 
         # 1. Anti-Air Reaction Guard: Opponent airborne and attacking above P1
         if p2.pos.y < -30.0 and p2.is_attacking and snapshot.distance <= self.anti_air_distance:

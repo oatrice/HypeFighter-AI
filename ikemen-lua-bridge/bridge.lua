@@ -3,6 +3,7 @@
   FrameWhisper: Ikemen GO Lua Telemetry & Combat Micro-Event Bridge
   =============================================================================
   Streams 60 FPS fighter telemetry and combat micro-events via UDP to agent-core.
+  Receives bidirectional FighterAction commands on UDP port 9998 to drive AI.
   Compatible with Ikemen GO (macOS / Linux / Windows).
 --]]
 
@@ -13,14 +14,17 @@ local socket_ok, socket = pcall(require, "socket")
 -- Configuration
 bridge.config = {
     host = "127.0.0.1",
-    port = 9999,
+    telemetry_port = 9999,
+    input_port = 9998,
     enabled = true,
     debug = false
 }
 
-local udp = nil
+local telemetry_udp = nil
+local input_udp = nil
 local frame_counter = 0
 local prev_state = nil
+bridge.latest_action = nil
 
 -- Simple JSON encoder to eliminate external dependencies
 local function to_json(val)
@@ -71,31 +75,118 @@ local function get_prop(p, field, getter_name, default_val)
     return default_val
 end
 
--- Initialize UDP socket
+-- Initialize UDP sockets (telemetry stream + input receiver)
 function bridge.init(opts)
     opts = opts or {}
     if opts.host then bridge.config.host = opts.host end
-    if opts.port then bridge.config.port = opts.port end
+    if opts.telemetry_port then bridge.config.telemetry_port = opts.telemetry_port end
+    if opts.port then bridge.config.telemetry_port = opts.port end
+    if opts.input_port then bridge.config.input_port = opts.input_port end
     if opts.enabled ~= nil then bridge.config.enabled = opts.enabled end
     if opts.debug ~= nil then bridge.config.debug = opts.debug end
 
     if not socket_ok then
         if bridge.config.debug then
-            print("[FrameWhisper Bridge] LuaSocket not found. Running in offline/simulation mode.")
+            print("[FrameWhisper Bridge] LuaSocket not found. Running in offline mode.")
         end
         return false
     end
 
-    udp = socket.udp()
-    if udp then
-        udp:setpeername(bridge.config.host, bridge.config.port)
-        udp:settimeout(0) -- Non-blocking
-        if bridge.config.debug then
-            print(string.format("[FrameWhisper Bridge] UDP connected to %s:%d", bridge.config.host, bridge.config.port))
-        end
-        return true
+    -- 1. Outgoing Telemetry UDP socket
+    telemetry_udp = socket.udp()
+    if telemetry_udp then
+        telemetry_udp:setpeername(bridge.config.host, bridge.config.telemetry_port)
+        telemetry_udp:settimeout(0)
     end
-    return false
+
+    -- 2. Incoming Reverse Input UDP socket
+    input_udp = socket.udp()
+    if input_udp then
+        input_udp:setsockname(bridge.config.host, bridge.config.input_port)
+        input_udp:settimeout(0) -- Non-blocking
+        if bridge.config.debug then
+            print(string.format("[FrameWhisper Bridge] Listening for AI input on %s:%d", bridge.config.host, bridge.config.input_port))
+        end
+    end
+
+    return true
+end
+
+-- Lightweight JSON key-value extractor for compact action payloads
+local function parse_action_json(str)
+    if not str or str == "" then return nil end
+    local action = {}
+
+    local dir = str:match('"dir"%s*:%s*"([^"]+)"')
+    if dir then action.dir = dir end
+
+    local btn = str:match('"btn"%s*:%s*"([^"]+)"')
+    if btn then action.btn = btn end
+
+    local h_axis = str:match('"h_axis"%s*:%s*(-?%d+)')
+    if h_axis then action.h_axis = tonumber(h_axis) end
+
+    local f_lock = str:match('"f_lock"%s*:%s*(%a+)')
+    if f_lock then action.f_lock = (f_lock == "true") end
+
+    local reaction = str:match('"reaction"%s*:%s*"([^"]+)"')
+    if reaction then action.reaction = reaction end
+
+    return action
+end
+
+-- Poll incoming action commands from agent-core
+function bridge.poll_inputs()
+    if not input_udp then return bridge.latest_action end
+
+    while true do
+        local data, err = input_udp:receive()
+        if not data then break end
+        local action = parse_action_json(data)
+        if action then
+            bridge.latest_action = action
+        end
+    end
+    return bridge.latest_action
+end
+
+-- Inject verified action into player command buffer / input table
+function bridge.apply_input(p, action)
+    if not p or not action then return end
+
+    -- Mapping Direction to Ikemen/Mugen virtual buttons
+    local dir = action.dir
+    local fwd = (dir == "FORWARD" or dir == "UP_FORWARD" or dir == "DOWN_FORWARD")
+    local back = (dir == "BACK" or dir == "UP_BACK" or dir == "DOWN_BACK")
+    local up = (dir == "UP" or dir == "UP_FORWARD" or dir == "UP_BACK")
+    local down = (dir == "DOWN" or dir == "DOWN_FORWARD" or dir == "DOWN_BACK")
+
+    if action.f_lock and fwd then
+        fwd = false -- Safety Lock enforced in engine
+    end
+
+    -- Mugen / Ikemen standard button mapping: x=LP, y=MP, z=HP, a=LK, b=MK, c=HK
+    local btn = action.btn
+    local btn_x = (btn == "LP")
+    local btn_y = (btn == "MP")
+    local btn_z = (btn == "HP")
+    local btn_a = (btn == "LK")
+    local btn_b = (btn == "MK")
+    local btn_c = (btn == "HK")
+
+    -- Assign to Ikemen player input table if available
+    if type(p.command) == "table" then
+        p.command.holdfwd = fwd
+        p.command.holdback = back
+        p.command.holdup = up
+        p.command.holddown = down
+        p.command.x = btn_x
+        p.command.y = btn_y
+        p.command.z = btn_z
+        p.command.a = btn_a
+        p.command.b = btn_b
+        p.command.c = btn_c
+    end
 end
 
 -- Extract normalized character telemetry
@@ -132,7 +223,7 @@ function bridge.extract_player_state(p, id)
         },
         facing = tonumber(facing) or 1,
         stateno = tonumber(stateno) or 0,
-        movetype = tostring(movetype):upper(), -- "I" (idle), "A" (attack), "H" (hit/hurt)
+        movetype = tostring(movetype):upper(),
         ctrl = not not ctrl,
         invincible = not not invincible,
         armor = not not armor
@@ -140,23 +231,17 @@ function bridge.extract_player_state(p, id)
 end
 
 -- Spatial safe-zone evaluation:
--- Returns true if AI (p1) is behind the attacking opponent (p2) relative to p2's attack direction.
 function bridge.evaluate_safe_zone(p1, p2)
     if not p1 or not p2 then return false end
-    
     local p2_attacking = (p2.movetype == "A")
     if not p2_attacking then return false end
 
-    -- Opponent facing Right (1) while AI is behind them on the Left (p1.pos.x < p2.pos.x)
     if p2.facing == 1 and (p1.pos.x < p2.pos.x) then
         return true
     end
-
-    -- Opponent facing Left (-1) while AI is behind them on the Right (p1.pos.x > p2.pos.x)
     if p2.facing == -1 and (p1.pos.x > p2.pos.x) then
         return true
     end
-
     return false
 end
 
@@ -174,7 +259,7 @@ function bridge.detect_micro_events(current, previous)
         return events
     end
 
-    -- 1. WHIFF_DETECTED: Opponent was attacking last frame, now finished, without hitting P1
+    -- 1. WHIFF_DETECTED
     if p2_prev.movetype == "A" and p2_curr.movetype ~= "A" and p1_curr.movetype ~= "H" then
         events[#events + 1] = {
             type = "WHIFF_DETECTED",
@@ -186,7 +271,7 @@ function bridge.detect_micro_events(current, previous)
         }
     end
 
-    -- 2. DAMAGE_TAKEN: Life dropped while entering or in Hurt state ("H")
+    -- 2. DAMAGE_TAKEN
     if p1_curr.life < p1_prev.life and p1_curr.movetype == "H" then
         events[#events + 1] = {
             type = "DAMAGE_TAKEN",
@@ -198,7 +283,7 @@ function bridge.detect_micro_events(current, previous)
         }
     end
 
-    -- 3. BLOCK_STRING: P1 is guarding against incoming pressure (stateno 120-155)
+    -- 3. BLOCK_STRING
     local is_guard_state = (p1_curr.stateno >= 120 and p1_curr.stateno <= 155)
     if is_guard_state and (p2_curr.movetype == "A" or p2_prev.movetype == "A") then
         events[#events + 1] = {
@@ -217,6 +302,12 @@ end
 -- Main tick function: invoke once per game loop tick (60 FPS)
 function bridge.tick(p1_raw, p2_raw, engine_meta)
     if not bridge.config.enabled then return nil end
+
+    -- 1. Poll incoming actions from agent-core & apply to P1
+    local action = bridge.poll_inputs()
+    if action and p1_raw then
+        bridge.apply_input(p1_raw, action)
+    end
 
     frame_counter = frame_counter + 1
     local now_ms = socket_ok and math.floor(socket.gettime() * 1000) or math.floor(os.clock() * 1000)
@@ -239,15 +330,14 @@ function bridge.tick(p1_raw, p2_raw, engine_meta)
         meta = engine_meta or {}
     }
 
-    -- Micro-events detection
     local events = bridge.detect_micro_events(snapshot, prev_state)
     snapshot.events = events
     prev_state = snapshot
 
-    -- Stream snapshot via UDP
-    if udp then
+    -- Stream snapshot via UDP to agent-core
+    if telemetry_udp then
         local payload = to_json(snapshot)
-        udp:send(payload)
+        telemetry_udp:send(payload)
     end
 
     return snapshot
