@@ -5,7 +5,7 @@ import os
 import re
 import signal
 import sys
-from agent_core.models.telemetry import MatchSnapshot, EgoCentricIntent
+from agent_core.models.telemetry import MatchSnapshot, EgoCentricIntent, ButtonInput, DirectionInput
 from agent_core.receiver.udp_receiver import TelemetryUDPReceiver
 from agent_core.controller.safety_gatekeeper import SafetyGatekeeper
 from agent_core.controller.action_sender import ActionUDPSender
@@ -104,6 +104,15 @@ class MatchRunner:
             if action.reaction_type and action.reaction_type.startswith("INSTANT_BLOCK"):
                 self.combo_engine.reset()
 
+        # Centralized Final Ground Gate: sanitize action right before transmission
+        if snapshot.p1.pos.y < -5.0:
+            if action.cmd in ("TripleKFPalm", "SmashKFUpper", "QCF_x", "QCB_x"):
+                action.cmd = None
+            if action.button in (ButtonInput.SPECIAL_1, ButtonInput.SPECIAL_2):
+                action.button = ButtonInput.NONE
+            if action.direction == DirectionInput.DOWN_BACK:
+                action.direction = DirectionInput.BACK
+
         # Transmit concrete action back into Ikemen GO via UDP and atomic IPC fallback
         self.action_sender.send(action, frame=snapshot.frame)
         try:
@@ -158,7 +167,7 @@ class MatchRunner:
             if self._latest_decision and should_display_thought:
                 dec = self._latest_decision
                 # Sync fresh frame distance into monologue
-                monologue = re.sub(r"([\d\.]+)px", f"{snapshot.distance:.1f}px", dec.internal_monologue)
+                monologue = re.sub(r"(\d+(?:\.\d+)?)\s*px", f"{snapshot.distance:.1f}px", dec.internal_monologue)
                 print(f"  🧠 [P1 Private Mind]: \"{monologue}\"", flush=True)
                 print(f"  💬 [P1 In-Game Chat]: \"{dec.public_chat}\"", flush=True)
                 if dec.audience_reply:

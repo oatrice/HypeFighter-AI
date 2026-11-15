@@ -24,10 +24,13 @@ class SafetyGatekeeper:
         proximity_danger_threshold: float = 85.0,
         anti_air_distance: float = 120.0,
         altitude_ceiling_threshold: float = -750.0,
+        super_cooldown_frames: int = 45,
     ):
         self.proximity_danger_threshold = proximity_danger_threshold
         self.anti_air_distance = anti_air_distance
         self.altitude_ceiling_threshold = altitude_ceiling_threshold
+        self.super_cooldown_frames = super_cooldown_frames
+        self.last_super_frame = -999
 
     def is_in_safe_back_zone(self, p1: PlayerState, p2: PlayerState) -> bool:
         """Determines if AI (P1) is behind the attacking opponent (P2) relative to P2's attack direction.
@@ -67,6 +70,13 @@ class SafetyGatekeeper:
         p2 = snapshot.p2
         safe_zone = self.is_in_safe_back_zone(p1, p2)
         is_p1_grounded = p1.pos.y >= -5.0
+        is_p2_reachable = p2.pos.y >= -80.0
+        is_super_ready = (
+            p1.power >= 1000
+            and is_p1_grounded
+            and is_p2_reachable
+            and (snapshot.frame - self.last_super_frame >= self.super_cooldown_frames)
+        )
 
         # -1. KO / Round-Over Guard: Stop all actions when either player is knocked out (life <= 0)
         if p1.life <= 0 or p2.life <= 0:
@@ -148,17 +158,20 @@ class SafetyGatekeeper:
         # 3. Spatial Hitbox Guardrail: Safe Back Zone Punishment
         if safe_zone:
             # Under NO circumstance may the AI walk forward into the enemy hitbox
-            # Lock forward movement and execute PUNISH_IN_PLACE or SUPER_PUNISH_IN_PLACE if meter ready!
-            super_cmd = "TripleKFPalm" if p1.power >= 1000 else None
-            reaction_type = "SUPER_PUNISH_IN_PLACE" if super_cmd else "PUNISH_IN_PLACE"
-            button = ButtonInput.NONE if super_cmd else ButtonInput.HEAVY_PUNCH
-            detail = (
-                "Enemy attack exposed back with >= 1000 power - executing Super Triple Kung Fu Palm!"
-                if super_cmd
-                else "Enemy attack exposed back - locking forward and punishing in place"
-            )
+            # Lock forward movement and execute PUNISH_IN_PLACE or SUPER_PUNISH_IN_PLACE if meter ready, grounded & off cooldown!
+            if is_super_ready:
+                self.last_super_frame = snapshot.frame
+                super_cmd = "TripleKFPalm"
+                reaction_type = "SUPER_PUNISH_IN_PLACE"
+                button = ButtonInput.NONE
+                detail = "Enemy attack exposed back with >= 1000 power - executing Super Triple Kung Fu Palm!"
+            else:
+                super_cmd = None
+                reaction_type = "PUNISH_IN_PLACE"
+                button = ButtonInput.HEAVY_PUNCH if is_p1_grounded else ButtonInput.NONE
+                detail = "Enemy attack exposed back - locking forward and punishing in place"
 
-            return FighterAction(
+            act = FighterAction(
                 direction=DirectionInput.NEUTRAL,
                 button=button,
                 cmd=super_cmd,
@@ -170,6 +183,7 @@ class SafetyGatekeeper:
                 absolute_horizontal=0,
                 meta={"detail": detail},
             )
+            return self._apply_centralized_ground_gate(act, is_p1_grounded)
 
         # 4. Standard Relative Ego-Centric Intent Translation
         direction = DirectionInput.NEUTRAL
@@ -189,12 +203,12 @@ class SafetyGatekeeper:
             button = ButtonInput.MEDIUM_KICK
         elif intent == EgoCentricIntent.HOLD_SAFE_PUNISH:
             direction = DirectionInput.NEUTRAL
-            button = ButtonInput.HEAVY_PUNCH
+            button = ButtonInput.HEAVY_PUNCH if is_p1_grounded else ButtonInput.NONE
             forward_locked = True
 
         abs_h = self._relative_to_absolute_horizontal(direction, p1.facing)
 
-        return FighterAction(
+        act = FighterAction(
             direction=direction,
             button=button,
             macro_intent=intent,
@@ -204,3 +218,19 @@ class SafetyGatekeeper:
             absolute_horizontal=abs_h,
             meta={"detail": f"Standard intent execution: {intent.value}"},
         )
+        return self._apply_centralized_ground_gate(act, is_p1_grounded)
+
+    def _apply_centralized_ground_gate(self, action: FighterAction, is_p1_grounded: bool) -> FighterAction:
+        """Centralized ground gate enforcing zero ground-only specials/supers mid-air."""
+        if not is_p1_grounded:
+            if action.cmd in ("TripleKFPalm", "SmashKFUpper", "QCF_x", "QCB_x"):
+                action.cmd = None
+            if action.button in (ButtonInput.SPECIAL_1, ButtonInput.SPECIAL_2):
+                action.button = ButtonInput.NONE
+            if action.direction == DirectionInput.DOWN_BACK:
+                action.direction = DirectionInput.BACK
+                action.reaction_type = "INSTANT_BLOCK_AIR"
+            if action.reaction_type == "ANTI_AIR":
+                action.reaction_type = "INSTANT_BLOCK_AIR"
+                action.button = ButtonInput.NONE
+        return action

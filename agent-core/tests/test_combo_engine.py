@@ -102,18 +102,56 @@ def test_combo_engine_super_move_finisher_when_meter_available():
     assert action.reaction_type == "SUPER_HIT_CONFIRM"
 
 
-def test_combo_engine_aborts_on_blockstun():
+def test_combo_engine_aborts_on_real_blockstun():
     engine = ComboEngine()
-    snap1 = make_snapshot(p1_movetype="A", p2_movetype="I", frame=1)
+    # P1 attacks in close combat (distance 40px)
+    snap1 = make_snapshot(p1_movetype="A", p2_movetype="I", distance=40.0, frame=1)
     engine.update(snap1)
 
-    # Opponent is NOT in hitstun, but in block/idle after attack hits guard
-    snap2 = make_snapshot(p1_movetype="I", p2_movetype="I", frame=15)
+    # Opponent blocks attack (Ikemen GO state 150: Stand Guard Hit, movetype="H")
+    snap2 = make_snapshot(p1_movetype="I", p2_movetype="H", distance=40.0, frame=15)
+    snap2.p2.stateno = 150  # Guard state in 120-155
     action = engine.update(snap2)
 
-    # Engine must abort combo to prevent unsafe whiff/punish
+    # Engine must abort combo to prevent unsafe punish
     assert engine.state == ComboState.IDLE
-    assert action is None or action.direction == DirectionInput.DOWN_BACK
+    assert action is not None
+    assert action.reaction_type == "COMBO_ABORT_BLOCK"
+    assert action.direction == DirectionInput.DOWN_BACK
+
+
+def test_no_combo_abort_block_at_long_range():
+    engine = ComboEngine()
+    # P1 whiffs attack at long range (distance 300px > 130px)
+    snap1 = make_snapshot(p1_movetype="A", p2_movetype="I", distance=300.0, frame=1)
+    engine.update(snap1)
+
+    # P1 finishes attack animation while P2 is idle far away
+    snap2 = make_snapshot(p1_movetype="I", p2_movetype="I", distance=300.0, frame=15)
+    snap2.p2.stateno = 0
+    action = engine.update(snap2)
+
+    # Must NOT trigger COMBO_ABORT_BLOCK when fighters are far apart
+    assert engine.state == ComboState.IDLE
+    if action is not None:
+        assert action.reaction_type != "COMBO_ABORT_BLOCK"
+
+
+def test_no_combo_abort_block_when_opponent_not_guarding():
+    engine = ComboEngine()
+    # P1 attacks in close range, but P2 was never in guard state (e.g. idle or walk stateno 20)
+    snap1 = make_snapshot(p1_movetype="A", p2_movetype="I", distance=50.0, frame=1)
+    engine.update(snap1)
+
+    snap2 = make_snapshot(p1_movetype="I", p2_movetype="I", distance=50.0, frame=15)
+    snap2.p2.stateno = 0  # Neutral idle, not 120-155 guard
+    action = engine.update(snap2)
+
+    # Should reset cleanly to IDLE without false COMBO_ABORT_BLOCK
+    assert engine.state == ComboState.IDLE
+    if action is not None:
+        assert action.reaction_type != "COMBO_ABORT_BLOCK"
+
 
 
 def test_combo_engine_clutch_comeback_mode():

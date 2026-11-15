@@ -52,3 +52,28 @@ def test_runner_reaction_log_throttling(runner, capsys):
     # Private mind should only appear once on initial reaction transition, not on every frame
     count_private_mind = captured.count("P1 Private Mind")
     assert count_private_mind <= 1, f"Expected throttled Private Mind logs <= 1, but got {count_private_mind}"
+
+
+def test_runner_fresh_distance_sync(runner, capsys):
+    from agent_core.tactician.tactical_brain import TacticalDecision
+    from agent_core.models.telemetry import EgoCentricIntent
+
+    # Set decision with stale distance (e.g. 427.1px)
+    runner._latest_decision = TacticalDecision(
+        stance="neutral_footsies",
+        macro_intent=EgoCentricIntent.ZONING,
+        thought="คุมระยะ",
+        internal_monologue="สถานการณ์สมดุล ระยะห่าง 427.1px รักษาพื้นที่คุมจังหวะ Zoning",
+        public_chat="เข้ามาเลย Shadow!",
+    )
+
+    # Frame 60 snapshot with fresh distance 164.6
+    p1 = PlayerState(id=1, life=1000, pos=Position(x=0.0, y=0.0), facing=1, movetype="I")
+    p2 = PlayerState(id=2, life=1000, pos=Position(x=164.6, y=0.0), facing=-1, movetype="I")
+    snap = MatchSnapshot(frame=60, timestamp_ms=2000, distance=164.6, safe_back_zone=False, p1=p1, p2=p2)
+    runner.on_snapshot(snap)
+
+    out = capsys.readouterr().out
+    assert "164.6px" in out
+    assert "427.1px" not in out
+

@@ -110,8 +110,8 @@ def test_guardrail_locks_forward_movement_and_forces_punish_in_place(gatekeeper)
 
 
 def test_guardrail_executes_super_punish_when_power_meter_ready(gatekeeper):
-    # AI is in SAFE_BACK_ZONE with power >= 1000
-    snapshot = create_snapshot(p1_x=-50.0, p2_x=50.0, p2_facing=1, p2_movetype="A", p1_power=1000)
+    # AI is in SAFE_BACK_ZONE with power >= 1000 on ground
+    snapshot = create_snapshot(p1_x=-50.0, p1_y=0.0, p2_x=50.0, p2_y=0.0, p2_facing=1, p2_movetype="A", p1_power=1000)
     action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RUSHDOWN)
 
     assert action.forward_locked is True
@@ -119,6 +119,60 @@ def test_guardrail_executes_super_punish_when_power_meter_ready(gatekeeper):
     assert action.is_reaction is True
     assert action.reaction_type == "SUPER_PUNISH_IN_PLACE"
     assert action.cmd == "TripleKFPalm"
+
+
+def test_airborne_p1_cannot_super_punish(gatekeeper):
+    # AI is in SAFE_BACK_ZONE with power >= 1000, BUT P1 is airborne (y = -20.0 < -5.0)
+    snapshot = create_snapshot(p1_x=-50.0, p1_y=-20.0, p2_x=50.0, p2_y=0.0, p2_facing=1, p2_movetype="A", p1_power=1000)
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RUSHDOWN)
+
+    # Must NOT output grounded Super Move mid-air!
+    assert action.cmd != "TripleKFPalm"
+    assert action.reaction_type != "SUPER_PUNISH_IN_PLACE"
+
+
+def test_super_punish_target_out_of_reach(gatekeeper):
+    # P1 is grounded, but P2 is airborne high above reach (p2_y = -90.0 < -80.0)
+    snapshot = create_snapshot(p1_x=-50.0, p1_y=0.0, p2_x=50.0, p2_y=-90.0, p2_facing=1, p2_movetype="A", p1_power=1000)
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RUSHDOWN)
+
+    # Must NOT fire grounded Super Move when opponent is way up in the air
+    assert action.cmd != "TripleKFPalm"
+    assert action.reaction_type != "SUPER_PUNISH_IN_PLACE"
+
+
+def test_super_punish_cooldown_enforced(gatekeeper):
+    # First execution on frame 100
+    snap1 = create_snapshot(p1_x=-50.0, p1_y=0.0, p2_x=50.0, p2_y=0.0, p2_facing=1, p2_movetype="A", p1_power=1000)
+    snap1.frame = 100
+    act1 = gatekeeper.evaluate(snap1, desired_intent=EgoCentricIntent.RUSHDOWN)
+    assert act1.cmd == "TripleKFPalm"
+
+    # Frame 105 (within 45-frame cooldown): Must NOT spam Super Move again!
+    snap2 = create_snapshot(p1_x=-50.0, p1_y=0.0, p2_x=50.0, p2_y=0.0, p2_facing=1, p2_movetype="A", p1_power=1000)
+    snap2.frame = 105
+    act2 = gatekeeper.evaluate(snap2, desired_intent=EgoCentricIntent.RUSHDOWN)
+    assert act2.cmd != "TripleKFPalm"
+    assert act2.reaction_type != "SUPER_PUNISH_IN_PLACE"
+
+    # Frame 160 (cooldown expired): Can execute Super Move again if opening still valid
+    snap3 = create_snapshot(p1_x=-50.0, p1_y=0.0, p2_x=50.0, p2_y=0.0, p2_facing=1, p2_movetype="A", p1_power=1000)
+    snap3.frame = 160
+    act3 = gatekeeper.evaluate(snap3, desired_intent=EgoCentricIntent.RUSHDOWN)
+    assert act3.cmd == "TripleKFPalm"
+
+
+def test_centralized_ground_gate_strips_airborne_specials(gatekeeper):
+    # P1 is airborne at y = -54.9 (like F:00367 in telemetry)
+    # High-level intent commands ZONING
+    snapshot = create_snapshot(p1_x=-50.0, p1_y=-54.9, p2_x=50.0, p2_y=0.0, p2_facing=-1, p2_movetype="I")
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.ZONING)
+
+    # Button must be NONE, never SPECIAL_1
+    assert action.button != ButtonInput.SPECIAL_1
+    assert action.button == ButtonInput.NONE
+    assert action.cmd is None
+
 
 
 

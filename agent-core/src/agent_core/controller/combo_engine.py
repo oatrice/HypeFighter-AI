@@ -64,13 +64,33 @@ class ComboEngine:
                 self.reset()
                 return None
 
-            # Case A: Hit Confirmed! (Opponent in hitstun)
-            if p2.is_hurt or p2.movetype == "H":
+            is_p1_grounded = p1.pos.y >= -5.0
+            is_p2_reachable = p2.pos.y >= -80.0
+            is_p2_guarding = (120 <= p2.stateno <= 155)
+            is_p2_hit = (p2.is_hurt or p2.movetype == "H") and not is_p2_guarding
+
+            # Case A: Real Blockstun Detected in combat range (120 <= stateno <= 155)
+            if is_p2_guarding and snapshot.distance <= 130.0:
+                self.reset()
+                guard_dir = DirectionInput.DOWN_BACK if is_p1_grounded else DirectionInput.BACK
+                return FighterAction(
+                    direction=guard_dir,
+                    button=ButtonInput.NONE,
+                    macro_intent=EgoCentricIntent.RETREAT,
+                    forward_locked=True,
+                    is_reaction=True,
+                    reaction_type="COMBO_ABORT_BLOCK",
+                    absolute_horizontal=0,
+                    meta={"detail": f"Opponent blocked attack (stateno={p2.stateno}) - aborting combo into guard"},
+                )
+
+            # Case B: Hit Confirmed! (Opponent in true hitstun, not guarding)
+            if is_p2_hit:
                 self.state = ComboState.CONFIRMED
                 self.current_step += 1
 
                 # Check Clutch Comeback (Low HP <= 40% and power >= 1000)
-                if p1.life <= 400 and p1.power >= 1000:
+                if p1.life <= 400 and p1.power >= 1000 and is_p1_grounded and is_p2_reachable:
                     return FighterAction(
                         direction=DirectionInput.NEUTRAL,
                         button=ButtonInput.NONE,
@@ -83,8 +103,8 @@ class ComboEngine:
                         meta={"detail": "Clutch Super Hit-Confirm (Triple Kung Fu Palm)"},
                     )
 
-                # Case B: Standard Super Move Finisher (Power >= 1000)
-                if p1.power >= 1000:
+                # Standard Super Move Finisher (Power >= 1000)
+                if p1.power >= 1000 and is_p1_grounded and is_p2_reachable:
                     return FighterAction(
                         direction=DirectionInput.NEUTRAL,
                         button=ButtonInput.NONE,
@@ -97,11 +117,9 @@ class ComboEngine:
                         meta={"detail": "Super Move Hit-Confirm (Triple Kung Fu Palm)"},
                     )
 
-                # Case C: Meterless Special Move Chaining (Power < 1000)
-                is_p1_grounded = p1.pos.y >= -5.0
-                is_p2_reachable = p2.pos.y >= -120.0
-
-                if is_p1_grounded and is_p2_reachable:
+                # Meterless Special Move Chaining (Power < 1000)
+                is_p2_special_reachable = p2.pos.y >= -120.0
+                if is_p1_grounded and is_p2_special_reachable:
                     return FighterAction(
                         direction=DirectionInput.NEUTRAL,
                         button=ButtonInput.HEAVY_PUNCH,
@@ -126,21 +144,10 @@ class ComboEngine:
                         meta={"detail": "Aerial/Ceiling target juggle hit-confirm (Normal Attack)"},
                     )
 
-            # Case D: Attack whiffs or is blocked (P1 stopped attacking while P2 was never in hitstun)
-            if not p1.is_attacking and p1.movetype != "A" and p2.movetype != "H":
-                is_p1_grounded = p1.pos.y >= -5.0
+            # Case C: Attack whiffs without block contact, or distance too far
+            if not p1.is_attacking and p1.movetype != "A" and not is_p2_hit:
                 self.reset()
-                guard_dir = DirectionInput.DOWN_BACK if is_p1_grounded else DirectionInput.BACK
-                return FighterAction(
-                    direction=guard_dir,
-                    button=ButtonInput.NONE,
-                    macro_intent=EgoCentricIntent.RETREAT,
-                    forward_locked=True,
-                    is_reaction=True,
-                    reaction_type="COMBO_ABORT_BLOCK",
-                    absolute_horizontal=0,
-                    meta={"detail": "Attack blocked or whiffed - aborting combo into guard"},
-                )
+                return None
 
             return None
 
