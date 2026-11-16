@@ -1,5 +1,7 @@
 # Environment & Agents
 .agents/
+adlc/
+engine/
 .venv/
 env/
 venv/
@@ -29,5 +31,6 @@ Thumbs.db
 
 # Logs & Event Stream Outputs
 *.log
+match_history*.txt
 events.jsonl
 *.dat

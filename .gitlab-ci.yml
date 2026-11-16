@@ -1,0 +1,63 @@
+stages:
+  - lint
+  - test
+  - security
+  - benchmark
+  - build
+
+default:
+  image: python:3.11-slim
+  before_script:
+    - python -V
+    - pip install --upgrade pip
+    - pip install -e "agent-core/[dev]"
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PYTHONPATH: "agent-core/src"
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .cache/pip
+
+# 1. Static Lint & Syntax Verification
+lint:
+  stage: lint
+  script:
+    - python -m compileall agent-core/src agent-core/tests scripts
+
+# 2. Comprehensive Deterministic Unit & Integration Tests
+unit-tests:
+  stage: test
+  script:
+    - pytest agent-core/tests/ -v --junitxml=junit-report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: junit-report.xml
+    expire_in: 7 days
+
+# 3. Security, Fuzzing & Resilience Gate
+security-audit:
+  stage: security
+  script:
+    - pytest agent-core/tests/test_security_fuzzing.py -v
+
+# 4. 60Hz Real-Time Latency Benchmark (< 800us budget)
+benchmark-latency:
+  stage: benchmark
+  script:
+    - chmod +x ./scripts/run_eval.sh
+    - ./scripts/run_eval.sh
+
+# 5. Build Artifact Verification
+build-package:
+  stage: build
+  script:
+    - pip install build
+    - python -m build agent-core/
+  artifacts:
+    paths:
+      - agent-core/dist/
+    expire_in: 14 days
