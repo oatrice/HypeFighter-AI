@@ -94,9 +94,35 @@
       background: linear-gradient(90deg, #ff7675, #ffa502);
       transition: width 0.3s ease-out;
     }
+    #demo-controls {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      z-index: 9999;
+      pointer-events: auto;
+    }
+    .demo-btn {
+      background: rgba(0, 0, 0, 0.85);
+      color: #00cec9;
+      border: 2px solid #00cec9;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .demo-btn:hover {
+      background: #00cec9;
+      color: #000000;
+    }
   </style>
 </head>
 <body>
+  <div id="demo-controls">
+    <button id="toggle-demo" class="demo-btn">🎮 Preview Demo Mode (ทดลองแสดงผล)</button>
+  </div>
+
   <main id="stage" aria-label="Fighting Game Live Overlay">
     <section id="bubble" class="thought-bubble" role="status" aria-live="polite" aria-atomic="true">
       <header id="stance" class="stance-badge" aria-label="Tactical Stance">WHIFF PUNISH</header>
@@ -112,39 +138,128 @@
   </aside>
 
   <script>
-    // Connect to agent-core WebSocket stream
-    const ws = new WebSocket("ws://127.0.0.1:8765");
     const bubble = document.getElementById("bubble");
     const stance = document.getElementById("stance");
     const thoughtText = document.getElementById("thought-text");
     const hypeBar = document.getElementById("hype-bar");
     const hypeFill = document.getElementById("hype-fill");
+    const demoControls = document.getElementById("demo-controls");
+    const toggleDemoBtn = document.getElementById("toggle-demo");
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "AI_THOUGHT") {
-          bubble.style.display = "block";
-          stance.textContent = String(data.stance || "TACTICAL");
-          thoughtText.textContent = String(data.thought || "...");
-          
-          // Map game coordinates to screen coordinates safely
-          const posX = Number(data.pos_x) || 0;
-          const posY = Number(data.pos_y) || 0;
-          const screenX = Math.max(20, Math.min(window.innerWidth - 20, window.innerWidth / 2 + posX * 1.5));
-          const screenY = Math.max(20, Math.min(window.innerHeight - 20, window.innerHeight * 0.75 + posY * 1.5 - 120));
-          bubble.style.left = `${screenX}px`;
-          bubble.style.top = `${screenY}px`;
-        }
-        if (data.type === "HYPE_UPDATE") {
-          const hypePct = Math.max(0, Math.min(100, Number(data.hype_percentage) || 0));
-          hypeFill.style.width = `${hypePct}%`;
-          hypeBar.setAttribute("aria-valuenow", hypePct.toString());
-        }
-      } catch (err) {
-        console.error("Overlay parsing error", err);
+    // Hide demo button if in OBS mode (?obs=1 or ?stream=1)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("obs") === "1" || urlParams.get("stream") === "1") {
+      demoControls.style.display = "none";
+    }
+
+    let isDemoRunning = false;
+    let demoInterval = null;
+    let demoAnimFrame = null;
+    let demoStep = 0;
+
+    const demoScenarios = [
+      { stance: "WHIFF PUNISH", text: "เขาต่อยไปทางขวาเปิดหลังโล่ง สวนกลับตรงนี้เลย!", hype: 45 },
+      { stance: "ANTI-AIR", text: "ศัตรูกระโดดลอยตัวเข้ามา สอยร่วงด้วยหมัดหนัก (HP)!", hype: 68 },
+      { stance: "RUSHDOWN", text: "คู่ต่อสู้เลือดวิกฤต เดินหน้าบุกกดดันต่อเนื่อง!", hype: 82 },
+      { stance: "SUPER MOVE", text: "เกจพลังเต็ม 1000 ปลดปล่อยท่าไม้ตาย TripleKFPalm พลิกเกม!", hype: 95 },
+      { stance: "CORNER SPACING", text: "เกือบติดมุมฉาก ดึงระยะคุมเชิงรักษาระยะปลอดภัย", hype: 55 },
+    ];
+
+    function startDemo() {
+      isDemoRunning = true;
+      toggleDemoBtn.textContent = "⏹️ Stop Demo (หยุดทดลอง)";
+      bubble.style.display = "block";
+      
+      let t = 0;
+      function animateFighter() {
+        if (!isDemoRunning) return;
+        t += 0.03;
+        const posX = Math.sin(t) * 120;
+        const posY = Math.abs(Math.sin(t * 1.5)) * -25;
+        const screenX = window.innerWidth / 2 + posX * 1.5;
+        const screenY = window.innerHeight * 0.75 + posY * 1.5 - 120;
+        bubble.style.left = `${screenX}px`;
+        bubble.style.top = `${screenY}px`;
+        demoAnimFrame = requestAnimationFrame(animateFighter);
       }
-    };
+      animateFighter();
+
+      function updateScenario() {
+        const item = demoScenarios[demoStep % demoScenarios.length];
+        stance.textContent = item.stance;
+        thoughtText.textContent = item.text;
+        hypeFill.style.width = `${item.hype}%`;
+        hypeBar.setAttribute("aria-valuenow", item.hype.toString());
+        demoStep++;
+      }
+      updateScenario();
+      demoInterval = setInterval(updateScenario, 3000);
+    }
+
+    function stopDemo() {
+      isDemoRunning = false;
+      toggleDemoBtn.textContent = "🎮 Preview Demo Mode (ทดลองแสดงผล)";
+      clearInterval(demoInterval);
+      cancelAnimationFrame(demoAnimFrame);
+      bubble.style.display = "none";
+      hypeFill.style.width = "0%";
+      hypeBar.setAttribute("aria-valuenow", "0");
+    }
+
+    toggleDemoBtn.addEventListener("click", () => {
+      if (isDemoRunning) {
+        stopDemo();
+      } else {
+        startDemo();
+      }
+    });
+
+    // Auto-start demo if ?demo=1 is in URL
+    if (urlParams.get("demo") === "1") {
+      startDemo();
+    }
+
+    // Connect to agent-core WebSocket stream
+    let ws = null;
+    function connectWS() {
+      try {
+        ws = new WebSocket("ws://127.0.0.1:8765");
+        ws.onopen = () => {
+          if (isDemoRunning) stopDemo();
+          demoControls.style.display = "none";
+        };
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "AI_THOUGHT") {
+              bubble.style.display = "block";
+              stance.textContent = String(data.stance || "TACTICAL");
+              thoughtText.textContent = String(data.thought || "...");
+              const posX = Number(data.pos_x) || 0;
+              const posY = Number(data.pos_y) || 0;
+              const screenX = Math.max(20, Math.min(window.innerWidth - 20, window.innerWidth / 2 + posX * 1.5));
+              const screenY = Math.max(20, Math.min(window.innerHeight - 20, window.innerHeight * 0.75 + posY * 1.5 - 120));
+              bubble.style.left = `${screenX}px`;
+              bubble.style.top = `${screenY}px`;
+            }
+            if (data.type === "HYPE_UPDATE") {
+              const hypePct = Math.max(0, Math.min(100, Number(data.hype_percentage) || 0));
+              hypeFill.style.width = `${hypePct}%`;
+              hypeBar.setAttribute("aria-valuenow", hypePct.toString());
+            }
+          } catch (err) {
+            console.error("Overlay parsing error", err);
+          }
+        };
+        ws.onclose = () => {
+          setTimeout(connectWS, 2000);
+        };
+      } catch (e) {
+        // Fallback retry
+        setTimeout(connectWS, 2000);
+      }
+    }
+    connectWS();
   </script>
 </body>
 </html>
