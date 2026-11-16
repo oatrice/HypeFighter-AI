@@ -34,3 +34,4 @@ Thumbs.db
 match_history*.txt
 events.jsonl
 *.dat
+uv.lock
