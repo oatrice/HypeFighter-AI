@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-16
+
+### Added
+- **Okizeme & Meaty Knockdown Pressure (`combo_engine.py`)**: aggressive approach upon enemy knockdown ($Dist > 55\text{px}$) and frame-1 meaty buffer (`c.LK` / `OKIZEME_MEATY`) upon opponent rising from floor (`stateno 5120`) (#15).
+- **High-Low Offensive Mixup (`combo_engine.py`)**: breaks opponent holding guard for $\ge 30$ consecutive frames by alternating between crouching sweeps (`DOWN + LK`) and standing high pokes (`LP`) (#15).
+- **Frame-1 Invincible Wakeup Reversal (`safety_gatekeeper.py`)**: detects P1 recovering from knockdown (`stateno 5120 -> 0`) and punishes incoming melee attacks with frame-1 `SmashKFUpper` (or `TripleKFPalm` if $Power \ge 1000$) (#15).
+- **Air-to-Air Priority Collision (`safety_gatekeeper.py`)**: contests aerial collisions with air heavy punch normal (`AIR_TO_AIR_ENGAGE`) when both fighters are airborne ($Y < -15\text{px}$) within close proximity ($Dist \le 90\text{px}$) (#15).
+- **Contextual In-Game Commentary & Overlay Thought Stream (`runner.py`)**: added reaction-synced Thai internal monologue and public fight chat for okizeme pressure, mixups, wakeup reversals, and air clashes with atomic IPC thought state updates (#15).
+- **Combat Telemetry Metrics Breakdown**: enhanced `scripts/analyze_combat_metrics.py` to parse and track okizeme meaty attacks, high-low mixups, wakeup reversals, and air clashes in match history logs.
+- **Expanded Test Suite**: added tests across `test_combo_engine.py`, `test_safety_gatekeeper.py`, and `test_runner.py`, expanding total deterministic verification matrix to 82 tests with 100% pass rate.
+
 ## [0.2.0] - 2026-11-16
 
 ### Added
