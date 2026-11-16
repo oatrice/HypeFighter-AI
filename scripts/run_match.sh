@@ -26,9 +26,11 @@ else
     source .venv/bin/activate
 fi
 
-# 2. Launch AI Agent Core in background with unbuffered output (-u)
-echo "Starting 60Hz AI Agent Core..."
-python3 -u -m agent_core.runner &
+# 2. Launch AI Agent Core in background with unbuffered output (-u) tee'd to match_history.txt
+MATCH_LOG="$PROJECT_ROOT/match_history.txt"
+rm -f "$MATCH_LOG"
+echo "Starting 60Hz AI Agent Core (Logging to $MATCH_LOG)..."
+python3 -u -m agent_core.runner 2>&1 | tee "$MATCH_LOG" &
 AGENT_PID=$!
 
 # Trap signals to ensure background python process is killed on exit
@@ -95,3 +97,12 @@ fi
     -height 720
 
 echo "Match completed."
+
+# Auto-analyze combat metrics immediately upon match completion
+if [ -f "$MATCH_LOG" ] && [ -s "$MATCH_LOG" ]; then
+    echo ""
+    echo "============================================================"
+    echo "📊 FrameWhisper Auto Post-Match Combat Efficiency Metrics"
+    echo "============================================================"
+    python3 "$PROJECT_ROOT/scripts/analyze_combat_metrics.py" "$MATCH_LOG"
+fi

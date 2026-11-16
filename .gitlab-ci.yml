@@ -4,6 +4,7 @@ stages:
   - security
   - benchmark
   - build
+  - release
 
 default:
   image: python:3.11-slim
@@ -61,3 +62,36 @@ build-package:
     paths:
       - agent-core/dist/
     expire_in: 14 days
+
+# 6. Automated Git Tag & Release Creation on main branch
+auto-tag-release:
+  stage: release
+  image: alpine:latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - VERSION=$(cat VERSION)
+    - TAG="v$VERSION"
+    - echo "Evaluating automated release tag $TAG on main..."
+    - |
+      HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --header "JOB-TOKEN: $CI_JOB_TOKEN" "$CI_API_V4_URL/projects/$CI_PROJECT_ID/repository/tags/$TAG")
+      if [ "$HTTP_STATUS" = "200" ]; then
+        echo "Tag $TAG already exists on remote repository (HTTP 200). Skipping tag creation."
+      else
+        echo "Tag $TAG does not exist. Creating tag $TAG via GitLab Repository API..."
+        CREATE_RES=$(curl -s -X POST --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+          --data-urlencode "tag_name=$TAG" \
+          --data-urlencode "ref=$CI_COMMIT_SHA" \
+          --data-urlencode "message=Release $TAG (Automated by GitLab CI)" \
+          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/repository/tags")
+        echo "Tag creation response: $CREATE_RES"
+        
+        echo "Creating GitLab Release for $TAG..."
+        curl -s -X POST --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+          -H "Content-Type: application/json" \
+          --data "{\"name\": \"Release $TAG\", \"tag_name\": \"$TAG\", \"description\": \"Automated release for $TAG via FrameWhisper CI/CD pipeline.\"}" \
+          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/releases" || true
+        echo "Automated release tag $TAG completed successfully!"
+      fi
