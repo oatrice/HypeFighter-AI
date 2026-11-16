@@ -434,4 +434,47 @@ def test_air_to_air_aerial_collision(gatekeeper):
     assert action.button == ButtonInput.HEAVY_PUNCH
 
 
+def test_corner_escape_left_boundary(gatekeeper):
+    # P1 is trapped at left edge x <= -135 with opponent pressuring at dist <= 60
+    snapshot = create_snapshot(
+        p1_x=-140.0, p1_y=0.0, p1_facing=1, p1_movetype="I",
+        p2_x=-90.0, p2_y=0.0, p2_facing=-1, p2_movetype="I"
+    )
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RETREAT)
+
+    assert action.reaction_type == "CORNER_ESCAPE"
+    assert action.direction in (DirectionInput.UP_FORWARD, DirectionInput.FORWARD)
+    assert action.absolute_horizontal == 1  # Jumping right toward stage center
+
+
+def test_corner_escape_right_boundary(gatekeeper):
+    # P1 is trapped at right edge x >= 135 with opponent pressuring at dist <= 60
+    snapshot = create_snapshot(
+        p1_x=140.0, p1_y=0.0, p1_facing=-1, p1_movetype="I",
+        p2_x=90.0, p2_y=0.0, p2_facing=1, p2_movetype="I"
+    )
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RETREAT)
+
+    assert action.reaction_type == "CORNER_ESCAPE"
+    assert action.direction in (DirectionInput.UP_FORWARD, DirectionInput.FORWARD)
+    assert action.absolute_horizontal == -1  # Jumping left toward stage center
+
+
+def test_clutch_aggression_late_round(gatekeeper):
+    # Frame >= 4140 (last 30s of 99s round = 5940 frames total, 5940 - 1800 = 4140)
+    # Even if desired_intent is RETREAT or ZONING, clutch aggression overrides to forward rushdown when opponent is not attacking
+    snapshot = create_snapshot(
+        p1_x=-50.0, p1_y=0.0, p1_facing=1, p1_movetype="I",
+        p2_x=50.0, p2_y=0.0, p2_facing=-1, p2_movetype="I"
+    )
+    snapshot.frame = 4500  # Late round!
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RETREAT)
+
+    assert action.macro_intent == EgoCentricIntent.RUSHDOWN
+    assert action.direction == DirectionInput.FORWARD
+    assert action.is_reaction is True
+    assert action.reaction_type == "CLUTCH_AGGRESSION"
+
+
+
 

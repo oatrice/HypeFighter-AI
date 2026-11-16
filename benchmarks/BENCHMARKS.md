@@ -4,14 +4,19 @@ Tracking automated combat progress, win rates, and defensive efficiency per git 
 
 ## 🏆 Performance Overview
 
-- **Total Matches Tracked:** 11
-- **P1 Overall Record:** 3W - 5L - 3D (**27.3% Win Rate**)
+- **Total Matches Tracked:** 16
+- **P1 Overall Record:** 6W - 7L - 3D (**37.5% Win Rate**)
 - **Mean Guard Success Rate:** 75.1%
 
 ## 📊 Match History Ledger
 
 | Date / Time | Commit | Branch | Outcome | Score | Guard % | Chip Saved | Clean Dmg | Anti-Air | Super | Commit Message |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| 2026-11-16 13:07:08 | `4b02186` | `feat/super-finisher-clutch-escape` | **🟢 WIN** | `2-1` | 73.7% | 2138 HP | 697 HP | 11 | 0 | Merge branch 'staging' into 'main' |
+| 2026-11-16 13:06:56 | `4b02186` | `feat/super-finisher-clutch-escape` | **🟢 WIN** | `2-0` | 84.6% | 1068 HP | 420 HP | 5 | 1 | Merge branch 'staging' into 'main' |
+| 2026-11-16 13:06:48 | `4b02186` | `feat/super-finisher-clutch-escape` | **🔴 LOSS** | `0-2` | 70.3% | 1260 HP | 740 HP | 7 | 0 | Merge branch 'staging' into 'main' |
+| 2026-11-16 13:06:40 | `4b02186` | `feat/super-finisher-clutch-escape` | **🔴 LOSS** | `0-1` | 74.4% | 1083 HP | 625 HP | 6 | 1 | Merge branch 'staging' into 'main' |
+| 2026-11-16 13:06:30 | `4b02186` | `feat/super-finisher-clutch-escape` | **🟢 WIN** | `2-1` | 72.3% | 950 HP | 917 HP | 12 | 1 | Merge branch 'staging' into 'main' |
 | 2026-11-16 12:30:30 | `d5aa350` | `fix/benchmark-relative-path-and-batch-runner` | **🔴 LOSS** | `0-1` | 70.6% | 1038 HP | 677 HP | 7 | 0 | chore(release): bump version to 0.3.0 |
 | 2026-11-16 12:27:02 | `a10cb2a` | `main` | **🔴 LOSS** | `0-1` | 69.8% | 1076 HP | 810 HP | 17 | 0 | Merge branch 'staging' into 'main' |
 | 2026-11-16 12:26:53 | `a10cb2a` | `main` | **🔴 LOSS** | `1-2` | 87.0% | 2386 HP | 332 HP | 17 | 1 | Merge branch 'staging' into 'main' |
