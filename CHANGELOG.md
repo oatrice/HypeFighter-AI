@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-11-16
+
+### Fixed
+- **Root-Anchored Benchmark Ledger Path (`scripts/analyze_combat_metrics.py`)**: anchored `DEFAULT_LEDGER` and `DEFAULT_MD` to project root instead of relative working directory, preventing duplicate ledger files created in `engine/benchmarks/`.
+- **Run Match Working Directory Reset (`scripts/run_match.sh`)**: added explicit `cd "$PROJECT_ROOT"` in cleanup trap before telemetry analysis.
+
+### Added
+- **Fast-Forward Batch Benchmark Runner (`scripts/run_benchmark_batch.sh`)**: automated multi-match runner with `-speedtest [multiplier]`, headless audio suppression (`-nosound`), and accurate background PID process tracking for clean lifecycle management and automated statistical tracking.
+
 ## [0.3.0] - 2026-11-16
 
 ### Added
