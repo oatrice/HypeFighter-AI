@@ -61,6 +61,18 @@ class ComboEngine:
             if self.state != ComboState.IDLE:
                 self.reset()
             if p2.stateno == 5120 and snapshot.distance <= 55.0:
+                if p1.power >= 1000:
+                    return FighterAction(
+                        direction=DirectionInput.NEUTRAL,
+                        button=ButtonInput.NONE,
+                        cmd="TripleKFPalm",
+                        macro_intent=EgoCentricIntent.RUSHDOWN,
+                        forward_locked=False,
+                        is_reaction=True,
+                        reaction_type="OKIZEME_SUPER_FINISHER",
+                        absolute_horizontal=0,
+                        meta={"detail": "Okizeme super finisher: executing Triple Kung Fu Palm on rising opponent with power >= 1000"},
+                    )
                 return FighterAction(
                     direction=DirectionInput.DOWN,
                     button=ButtonInput.LIGHT_KICK,

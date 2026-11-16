@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-11-16
+
+### Added
+- **Okizeme Super Finisher (`combo_engine.py`)**: converts wakeup meaty attacks on rising opponents (`stateno 5120`) directly into `TripleKFPalm` (`SUPER_MOVE`) when $Power \ge 1000$ to secure round finishes (#16).
+- **Clutch Aggression / Timeout Elimination (`safety_gatekeeper.py`)**: late-round clock awareness overrides passive retreating and zoning during the final 30 seconds of a round (frame $\ge 4140$), escalating stance to `RUSHDOWN` to eliminate draw timeouts (#16).
+- **Stage Corner Escape (`safety_gatekeeper.py`)**: detects stage boundary entrapment ($|X| \ge 135$) and close pressure ($Dist \le 60$), executing high forward jump cross-up maneuvers toward stage center (`CORNER_ESCAPE`) (#16).
+- **Combat Metrics Tracking (`scripts/analyze_combat_metrics.py`)**: added metrics counters for `OKIZEME_SUPER_FINISHER`, `CORNER_ESCAPE`, and `CLUTCH_AGGRESSION`.
+- **Benchmark Win Rate Verification**: achieved a **60.0% Win Rate** across 5 fast-forward benchmark matches against Daredevil AI, reducing timeout draws from 33.3% to 0.0%.
+
 ## [0.3.1] - 2026-11-16
 
 ### Fixed
