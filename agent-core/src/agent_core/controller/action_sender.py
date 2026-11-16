@@ -27,6 +27,7 @@ class ActionUDPSender:
             "frame": frame,
             "dir": action.direction.value,
             "btn": action.button.value,
+            "cmd": action.cmd or "",
             "h_axis": action.absolute_horizontal,
             "f_lock": action.forward_locked,
             "reaction": action.reaction_type or "",

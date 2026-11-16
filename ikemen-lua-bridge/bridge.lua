@@ -109,6 +109,9 @@ local function parse_action_json(str)
     local btn = str:match('"btn"%s*:%s*"([^"]+)"')
     if btn then action.btn = btn end
 
+    local cmd = str:match('"cmd"%s*:%s*"([^"]+)"')
+    if cmd and cmd ~= "" then action.cmd = cmd end
+
     local h_axis = str:match('"h_axis"%s*:%s*(-?%d+)')
     if h_axis then action.h_axis = tonumber(h_axis) end
 
@@ -168,10 +171,24 @@ function bridge.apply_input(p_id, action)
         local btn_c = (btn == "HK")
 
         if setCommand then
+            -- Special Moves & Super Moves (Hypers) command injection
+            if action.cmd and action.cmd ~= "" then
+                setCommand(action.cmd)
+            end
+
+            -- Normal Attack Buttons
             if btn_z then setCommand("z") end
+            if btn_y then setCommand("y") end
             if btn_x then setCommand("x") end
+            if btn_c then setCommand("c") end
+            if btn_b then setCommand("b") end
+            if btn_a then setCommand("a") end
+
+            -- Directional Motion Inputs (Supports Down-Back Crouch Guard)
             if fwd then setCommand("holdfwd") end
             if back then setCommand("holdback") end
+            if down then setCommand("holddown") end
+            if up then setCommand("holdup") end
         end
 
         playerId(oldid)

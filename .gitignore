@@ -31,5 +31,6 @@ Thumbs.db
 
 # Logs & Event Stream Outputs
 *.log
+match_history*.txt
 events.jsonl
 *.dat

@@ -95,6 +95,7 @@ class ButtonInput(str, Enum):
 class FighterAction(BaseModel):
     direction: DirectionInput = DirectionInput.NEUTRAL
     button: ButtonInput = ButtonInput.NONE
+    cmd: Optional[str] = None
     macro_intent: EgoCentricIntent = EgoCentricIntent.RETREAT
     forward_locked: bool = False
     safe_back_zone: bool = False
