@@ -44,7 +44,7 @@ cleanup() {
     if [ "$_metrics_analyzed" -eq 0 ] && [ -f "$MATCH_LOG" ] && [ -s "$MATCH_LOG" ]; then
         _metrics_analyzed=1
         echo "" | tee -a "$MATCH_LOG"
-        python3 "$PROJECT_ROOT/scripts/analyze_combat_metrics.py" "$MATCH_LOG" | tee -a "$MATCH_LOG"
+        python3 "$PROJECT_ROOT/scripts/analyze_combat_metrics.py" "$MATCH_LOG" --record | tee -a "$MATCH_LOG"
     fi
 }
 trap cleanup EXIT INT TERM
