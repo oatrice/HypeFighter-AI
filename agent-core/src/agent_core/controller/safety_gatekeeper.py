@@ -190,13 +190,24 @@ class SafetyGatekeeper:
         button = ButtonInput.NONE
         forward_locked = False
 
+        # Corner-Avoidance Guard: Prevent passive retreat from trapping fighter against stage boundaries
+        is_backed_into_corner = (p1.facing == 1 and p1.pos.x <= -140.0) or (p1.facing == -1 and p1.pos.x >= 140.0)
+
         if intent == EgoCentricIntent.RETREAT:
-            direction = DirectionInput.BACK
+            if is_backed_into_corner:
+                direction = DirectionInput.NEUTRAL
+                intent = EgoCentricIntent.HOLD_SAFE_PUNISH if is_p1_grounded else EgoCentricIntent.RETREAT
+            else:
+                direction = DirectionInput.BACK
         elif intent == EgoCentricIntent.RUSHDOWN:
             direction = DirectionInput.FORWARD
-            button = ButtonInput.LIGHT_PUNCH
+            is_air_juggle = (not is_p1_grounded and (p2.movetype == "H" or p2.is_hurt))
+            button = ButtonInput.LIGHT_PUNCH if (is_p1_grounded or is_air_juggle) else ButtonInput.NONE
         elif intent == EgoCentricIntent.ZONING:
-            direction = DirectionInput.BACK if snapshot.distance < 120 else DirectionInput.NEUTRAL
+            if is_backed_into_corner:
+                direction = DirectionInput.NEUTRAL
+            else:
+                direction = DirectionInput.BACK if snapshot.distance < 120 else DirectionInput.NEUTRAL
             button = ButtonInput.SPECIAL_1 if is_p1_grounded else ButtonInput.NONE
         elif intent == EgoCentricIntent.CROSS_UP:
             direction = DirectionInput.UP_FORWARD

@@ -135,4 +135,64 @@ def test_reaction_synced_narrative_super_punish(runner, capsys):
     assert "เปิดช่องโหว่ด้านหลัง" in out or "สวนกลับด้วยท่าไม้ตาย" in out
 
 
+def test_runner_round_reset_purges_ko_commentary(runner, capsys):
+    from agent_core.tactician.tactical_brain import TacticalDecision
+    from agent_core.models.telemetry import EgoCentricIntent
+
+    # 1. P1 was KO'd in round 1
+    runner._had_combat_damage = True
+    runner._latest_decision = TacticalDecision(
+        stance="ko_defeat",
+        macro_intent=EgoCentricIntent.RETREAT,
+        thought="เราถูกน็อกเอาต์",
+        internal_monologue="เราถูกน็อกเอาต์ (0 HP) ยกนี้สิ้นสุดลงแล้ว",
+        public_chat="ยกนี้ยอมรับความพ่ายแพ้... ยกหน้าเจอกันใหม่!",
+    )
+
+    # 2. Frame 100: Round Reset occurs (1000 vs 1000 HP)
+    p1 = PlayerState(id=1, life=1000, pos=Position(x=-70.0, y=0.0), facing=1, movetype="I")
+    p2 = PlayerState(id=2, life=1000, pos=Position(x=70.0, y=0.0), facing=-1, movetype="I")
+    snap_reset = MatchSnapshot(frame=100, timestamp_ms=2000, distance=140.0, safe_back_zone=False, p1=p1, p2=p2)
+    runner.on_snapshot(snap_reset)
+
+    # 3. Frame 120 (multiple of 60): commentary is logged
+    snap_comment = MatchSnapshot(frame=120, timestamp_ms=2320, distance=140.0, safe_back_zone=False, p1=p1, p2=p2)
+    runner.on_snapshot(snap_comment)
+
+    out = capsys.readouterr().out
+    assert "0 HP" not in out
+    assert "น็อกเอาต์" not in out
+    assert "ยอมรับความพ่ายแพ้" not in out
+
+
+def test_sustained_rushdown_commitment(runner):
+    from agent_core.tactician.tactical_brain import TacticalDecision
+    from agent_core.models.telemetry import EgoCentricIntent
+
+    # P2 is in closeout range (life <= 250)
+    runner._latest_decision = TacticalDecision(
+        stance="closeout_pressure",
+        macro_intent=EgoCentricIntent.RUSHDOWN,
+        thought="ปิดเกม",
+        internal_monologue="P2 เลือดวิกฤต เดินหน้ากดดันเต็มกำลัง",
+        public_chat="จบกันแค่นี้แหละ!",
+    )
+
+    p1 = PlayerState(id=1, life=1000, pos=Position(x=0.0, y=0.0), facing=1, movetype="I")
+    p2 = PlayerState(id=2, life=200, pos=Position(x=80.0, y=0.0), facing=-1, movetype="I")
+
+    sent_actions = []
+    runner.action_sender.send = MagicMock(side_effect=lambda act, frame: sent_actions.append((frame, act.macro_intent, act.direction)))
+
+    # Run for 10 consecutive frames
+    for f in range(20, 30):
+        snap = MatchSnapshot(frame=f, timestamp_ms=f * 16, distance=80.0, safe_back_zone=False, p1=p1, p2=p2)
+        runner.on_snapshot(snap)
+
+    # Must NOT flicker to Retreat after 1 frame; must sustain Rushdown / forward movement for multiple frames
+    rushdown_frames = [f for f, intent, dir_input in sent_actions if intent == EgoCentricIntent.RUSHDOWN]
+    assert len(rushdown_frames) >= 8, f"Expected sustained Rushdown >= 8 frames, but got {len(rushdown_frames)}"
+
+
+
 

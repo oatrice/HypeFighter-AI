@@ -339,3 +339,40 @@ def test_ko_state_neutralizes_actions(gatekeeper):
     assert action_p2_ko.button == ButtonInput.NONE
     assert action_p2_ko.reaction_type == "ROUND_OVER"
 
+
+def test_airborne_rushdown_button_suppressed(gatekeeper):
+    # P1 is airborne at y = -35.0 (< -5.0)
+    # High-level intent commands RUSHDOWN
+    snapshot = create_snapshot(
+        p1_x=-20.0, p1_y=-35.0, p1_facing=1, p1_movetype="I",
+        p2_x=40.0, p2_y=0.0, p2_facing=-1, p2_movetype="I"
+    )
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RUSHDOWN)
+
+    # Must NOT output grounded LIGHT_PUNCH while airborne!
+    assert action.button != ButtonInput.LIGHT_PUNCH
+    assert action.button == ButtonInput.NONE
+
+
+def test_corner_avoidance_spacing(gatekeeper):
+    # P1 facing right (1) backed into corner at X = -150.0 (<= -140.0)
+    # Opponent is idle at X = 0.0 (not attacking)
+    # High-level intent commands RETREAT
+    snapshot_left_corner = create_snapshot(
+        p1_x=-150.0, p1_y=0.0, p1_facing=1, p1_movetype="I",
+        p2_x=0.0, p2_y=0.0, p2_facing=-1, p2_movetype="I"
+    )
+    action_left = gatekeeper.evaluate(snapshot_left_corner, desired_intent=EgoCentricIntent.RETREAT)
+
+    # Must NOT retreat further into the corner! Direction must be NEUTRAL or FORWARD
+    assert action_left.direction != DirectionInput.BACK
+
+    # P1 facing left (-1) backed into corner at X = 150.0 (>= 140.0)
+    snapshot_right_corner = create_snapshot(
+        p1_x=150.0, p1_y=0.0, p1_facing=-1, p1_movetype="I",
+        p2_x=0.0, p2_y=0.0, p2_facing=1, p2_movetype="I"
+    )
+    action_right = gatekeeper.evaluate(snapshot_right_corner, desired_intent=EgoCentricIntent.RETREAT)
+    assert action_right.direction != DirectionInput.BACK
+
+

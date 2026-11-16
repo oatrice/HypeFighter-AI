@@ -39,6 +39,8 @@ class MatchRunner:
         self._had_combat_damage = False
         self._last_reaction_log_frame = -999
         self._last_reaction_type = None
+        self._current_intent = EgoCentricIntent.RETREAT
+        self._rushdown_commitment_frames = 0
 
     def on_snapshot(self, snapshot: MatchSnapshot):
         if snapshot.frame == self._last_processed_frame:
@@ -56,7 +58,19 @@ class MatchRunner:
             self.tactical_brain.reset_round()
             self._last_reaction_type = None
             self._last_reaction_log_frame = -999
-            print(f"\n🔔 [ROUND RESET]: Frame {snapshot.frame} - Both HP reset to 1000. Resetting ComboEngine and Coach Chat\n", flush=True)
+            self._rushdown_commitment_frames = 0
+            # Feature 1: Purge commentary cache immediately with clean 1000 vs 1000 state
+            summary = self.tactical_brain.summarize_window()
+            self._latest_decision = self.tactical_brain.fallback_tactical_rule(summary)
+            self._current_intent = self._latest_decision.macro_intent
+            try:
+                tmp_thought = self.thought_file + ".tmp"
+                with open(tmp_thought, "w", encoding="utf-8") as f:
+                    f.write(self._latest_decision.model_dump_json())
+                os.replace(tmp_thought, self.thought_file)
+            except Exception:
+                pass
+            print(f"\n🔔 [ROUND RESET]: Frame {snapshot.frame} - Both HP reset to 1000. Resetting ComboEngine, Coach Chat and Commentary Cache\n", flush=True)
 
         # Check for live spectator chat coaching from file (supports multiple queued messages)
         if os.path.exists(self.chat_file):
@@ -75,13 +89,19 @@ class MatchRunner:
 
         self.tactical_brain.ingest_snapshot(snapshot)
 
-        # Periodically consult tactical brain (every ~20 frames / 3Hz)
-        desired_intent = None
-        if self._frame_count % 20 == 0:
+        # Periodically consult tactical brain (every ~20 frames / 3Hz) or on initial frame
+        if self._frame_count % 20 == 0 or self._latest_decision is None:
             summary = self.tactical_brain.summarize_window()
             decision = self.tactical_brain.fallback_tactical_rule(summary)
-            desired_intent = decision.macro_intent
             self._latest_decision = decision
+
+            # Trigger commitment window if closeout pressure (p2.hp <= 250) or close range rushdown (dist <= 105)
+            if decision.macro_intent == EgoCentricIntent.RUSHDOWN:
+                self._current_intent = EgoCentricIntent.RUSHDOWN
+                self._rushdown_commitment_frames = 12
+            else:
+                if self._rushdown_commitment_frames <= 0:
+                    self._current_intent = decision.macro_intent
 
             # Write out thought state atomically for Floating Thought Bubble overlay
             try:
@@ -91,6 +111,18 @@ class MatchRunner:
                 os.replace(tmp_thought, self.thought_file)
             except Exception:
                 pass
+
+        # Feature 2: Anti-Flicker & Sustained Rushdown Commitment
+        # If in closeout mode (P2 <= 250 HP) or committed to forward rushdown, sustain RUSHDOWN intent
+        if self._latest_decision and self._latest_decision.macro_intent == EgoCentricIntent.RUSHDOWN:
+            desired_intent = EgoCentricIntent.RUSHDOWN
+        elif self._rushdown_commitment_frames > 0:
+            self._rushdown_commitment_frames -= 1
+            desired_intent = EgoCentricIntent.RUSHDOWN
+        elif snapshot.p2.life <= 250 and snapshot.distance <= 105.0 and snapshot.p1.pos.y >= -5.0:
+            desired_intent = EgoCentricIntent.RUSHDOWN
+        else:
+            desired_intent = self._current_intent
 
         # 60Hz deterministic safety gatekeeper evaluation
         action = self.gatekeeper.evaluate(snapshot, desired_intent=desired_intent)

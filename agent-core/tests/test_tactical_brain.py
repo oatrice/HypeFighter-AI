@@ -124,3 +124,13 @@ def test_tactical_brain_crowd_command_ttl_and_round_reset():
     dec2 = brain.fallback_tactical_rule(summary2)
     assert dec2.audience_reply is None or dec2.audience_reply == ""
 
+
+def test_tactical_brain_round_epoch_increment():
+    brain = TacticalBrain()
+    assert hasattr(brain, "round_epoch")
+    initial_epoch = brain.round_epoch
+
+    brain.reset_round()
+    assert brain.round_epoch == initial_epoch + 1
+
+

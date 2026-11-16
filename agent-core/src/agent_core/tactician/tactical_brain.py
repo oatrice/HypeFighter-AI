@@ -33,6 +33,7 @@ class TacticalBrain:
         self.chat_reply_count: int = 0
         self.chat_max_replies: int = 3
         self.chat_received_frame: int = 0
+        self.round_epoch: int = 1
 
     def ingest_snapshot(self, snapshot: MatchSnapshot):
         """Pushes latest 60Hz snapshot into the sliding window."""
@@ -46,7 +47,8 @@ class TacticalBrain:
         self.chat_received_frame = frame
 
     def reset_round(self):
-        """Resets round state and clears active chat coaching commands."""
+        """Resets round state, increments epoch and clears active chat coaching commands."""
+        self.round_epoch += 1
         self.active_chat_command = None
         self.chat_reply_count = 0
         self.viewer_chat_queue.clear()
