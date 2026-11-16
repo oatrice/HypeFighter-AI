@@ -1,30 +1,24 @@
 #!/usr/bin/env python3
-"""Interactive browser preview server for FrameWhisper Overlay UI.
+"""Zero-dependency interactive browser preview server for FrameWhisper Overlay UI.
 
 Launches:
 1. Static HTTP file server for overlay-ui/ on http://localhost:8080
-2. WebSocket server on ws://127.0.0.1:8765 (streaming live thoughts or simulation)
-3. Opens default browser automatically for instant testing.
+2. Pure-Python RFC 6455 WebSocket server on ws://127.0.0.1:8765 (zero pip/uv packages required!)
+3. Automatically opens default browser for instant testing.
 """
 import asyncio
+import base64
+import hashlib
 import http.server
 import json
 import math
 import os
 import socketserver
-import sys
+import struct
 import threading
 import time
 import webbrowser
 from typing import Set
-
-try:
-    import websockets
-except ImportError:
-    print("Installing websockets...")
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets"])
-    import websockets
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OVERLAY_DIR = os.path.join(PROJECT_ROOT, "overlay-ui")
@@ -32,7 +26,7 @@ THOUGHT_FILE = "/tmp/framewhisper_thought.json"
 HTTP_PORT = 8080
 WS_PORT = 8765
 
-CONNECTED_CLIENTS: Set[any] = set()
+CONNECTED_WRITERS: Set[asyncio.StreamWriter] = set()
 
 
 class QuietHTTPHandler(http.server.SimpleHTTPRequestHandler):
@@ -45,16 +39,76 @@ class QuietHTTPHandler(http.server.SimpleHTTPRequestHandler):
 
 def start_http_server():
     socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("127.0.0.1", HTTP_PORT), QuietHTTPHandler) as httpd:
-        httpd.serve_forever()
-
-
-async def ws_handler(websocket):
-    CONNECTED_CLIENTS.add(websocket)
     try:
-        await websocket.wait_closed()
+        with socketserver.TCPServer(("127.0.0.1", HTTP_PORT), QuietHTTPHandler) as httpd:
+            httpd.serve_forever()
+    except Exception:
+        pass
+
+
+def make_ws_handshake_response(key: str) -> bytes:
+    GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+    sha1 = hashlib.sha1((key.strip() + GUID).encode("utf-8")).digest()
+    accept = base64.b64encode(sha1).decode("utf-8")
+    return (
+        f"HTTP/1.1 101 Switching Protocols\r\n"
+        f"Upgrade: websocket\r\n"
+        f"Connection: Upgrade\r\n"
+        f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
+    ).encode("utf-8")
+
+
+def encode_ws_frame(message: str) -> bytes:
+    payload = message.encode("utf-8")
+    length = len(payload)
+    if length <= 125:
+        header = bytes([0x81, length])
+    elif length <= 65535:
+        header = struct.pack("!BBH", 0x81, 126, length)
+    else:
+        header = struct.pack("!BBQ", 0x81, 127, length)
+    return header + payload
+
+
+async def ws_client_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    headers = {}
+    try:
+        # Read HTTP upgrade request headers
+        while True:
+            line = await reader.readline()
+            if not line or line == b"\r\n":
+                break
+            line_str = line.decode("utf-8", errors="ignore")
+            if ":" in line_str:
+                k, v = line_str.split(":", 1)
+                headers[k.strip().lower()] = v.strip()
+
+        key = headers.get("sec-websocket-key")
+        if not key:
+            writer.close()
+            return
+
+        # Complete WebSocket RFC 6455 Handshake
+        response = make_ws_handshake_response(key)
+        writer.write(response)
+        await writer.drain()
+
+        CONNECTED_WRITERS.add(writer)
+
+        # Keep connection alive until client disconnects
+        while True:
+            data = await reader.read(1024)
+            if not data:
+                break
+    except Exception:
+        pass
     finally:
-        CONNECTED_CLIENTS.remove(websocket)
+        CONNECTED_WRITERS.discard(writer)
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:
+            pass
 
 
 async def broadcast_thoughts():
@@ -71,7 +125,7 @@ async def broadcast_thoughts():
 
     while True:
         await asyncio.sleep(0.05)  # 20Hz update
-        if not CONNECTED_CLIENTS:
+        if not CONNECTED_WRITERS:
             continue
 
         step += 1
@@ -85,7 +139,7 @@ async def broadcast_thoughts():
                     last_thought_mtime = mtime
                     with open(THOUGHT_FILE, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                    
+
                     payload = json.dumps({
                         "type": "AI_THOUGHT",
                         "stance": data.get("stance", "TACTICAL"),
@@ -93,7 +147,16 @@ async def broadcast_thoughts():
                         "pos_x": math.sin(t) * 80,
                         "pos_y": 0.0,
                     })
-                    await asyncio.gather(*[client.send(payload) for client in CONNECTED_CLIENTS], return_exceptions=True)
+                    frame_bytes = encode_ws_frame(payload)
+                    dead = set()
+                    for w in list(CONNECTED_WRITERS):
+                        try:
+                            w.write(frame_bytes)
+                            await w.drain()
+                        except Exception:
+                            dead.add(w)
+                    for d in dead:
+                        CONNECTED_WRITERS.discard(d)
                     continue
             except Exception:
                 pass
@@ -115,32 +178,46 @@ async def broadcast_thoughts():
             "hype_percentage": min(100, max(10, hype + math.sin(t * 2) * 10)),
         })
 
-        await asyncio.gather(
-            *[client.send(payload_thought) for client in CONNECTED_CLIENTS],
-            *[client.send(payload_hype) for client in CONNECTED_CLIENTS],
-            return_exceptions=True
-        )
+        frame1 = encode_ws_frame(payload_thought)
+        frame2 = encode_ws_frame(payload_hype)
+
+        dead = set()
+        for w in list(CONNECTED_WRITERS):
+            try:
+                w.write(frame1)
+                w.write(frame2)
+                await w.drain()
+            except Exception:
+                dead.add(w)
+        for d in dead:
+            CONNECTED_WRITERS.discard(d)
 
 
 async def main():
-    print("============================================================")
-    print("🥊 FrameWhisper Overlay UI Live Preview Server")
-    print("============================================================")
-    print(f"🌐 HTTP Web Server:      http://127.0.0.1:{HTTP_PORT}")
-    print(f"⚡ WebSocket Live Stream: ws://127.0.0.1:{WS_PORT}")
-    print("💡 กำลังเปิดเบราว์เซอร์เพื่อแสดงผล Overlay ตัวอย่าง...")
-    print("💡 กด Ctrl+C เพื่อหยุดการทำงาน")
-    print("============================================================")
+    print("============================================================", flush=True)
+    print("🥊 FrameWhisper Overlay UI Live Preview Server", flush=True)
+    print("============================================================", flush=True)
+    print(f"🌐 HTTP Web Server:      http://127.0.0.1:{HTTP_PORT}", flush=True)
+    print(f"⚡ WebSocket Live Stream: ws://127.0.0.1:{WS_PORT}", flush=True)
+    print("✨ Pure Standard-Library WebSocket (No external packages needed!)", flush=True)
+    print("💡 กำลังเปิดเบราว์เซอร์เพื่อแสดงผล Overlay ตัวอย่าง...", flush=True)
+    print("💡 กด Ctrl+C เพื่อหยุดการทำงาน", flush=True)
+    print("============================================================", flush=True)
 
     # Start HTTP in daemon thread
     t = threading.Thread(target=start_http_server, daemon=True)
     t.start()
 
-    # Open Browser
-    webbrowser.open(f"http://127.0.0.1:{HTTP_PORT}")
+    # Open Browser asynchronously
+    if os.environ.get("NO_BROWSER") != "1":
+        try:
+            threading.Thread(target=lambda: webbrowser.open(f"http://127.0.0.1:{HTTP_PORT}"), daemon=True).start()
+        except Exception:
+            pass
 
-    # Start WebSocket Server
-    async with websockets.serve(ws_handler, "127.0.0.1", WS_PORT):
+    # Start Pure-Python WebSocket Server
+    server = await asyncio.start_server(ws_client_handler, "127.0.0.1", WS_PORT)
+    async with server:
         await broadcast_thoughts()
 
 
