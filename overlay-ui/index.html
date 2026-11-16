@@ -3,40 +3,59 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FrameWhisper - Interactive Fighter Overlay</title>
+  <title>FrameWhisper - Interactive Fighter Overlay & Arena</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: transparent;
+      background: #0b0f19;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
+    }
+    body.obs-mode {
+      background: transparent !important;
+    }
+    #arena-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      pointer-events: none;
+      display: block;
     }
     #stage {
       position: relative;
       width: 100vw;
       height: 100vh;
+      z-index: 10;
       pointer-events: none;
     }
     .thought-bubble {
       position: absolute;
       background: #ffffff;
-      border: 3px solid #111111;
-      border-radius: 20px;
+      border: 3px solid #0f172a;
+      border-radius: 18px;
       padding: 10px 16px;
-      max-width: 240px;
+      max-width: 260px;
       font-size: 14px;
-      font-weight: bold;
-      color: #222222;
-      box-shadow: 4px 4px 0px rgba(0,0,0,0.4);
+      font-weight: 700;
+      color: #0f172a;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
       transform: translate(-50%, -100%);
-      transition: left 0.05s ease-out, top 0.05s ease-out;
-      display: none;
+      transition: left 0.06s ease-out, top 0.06s ease-out;
+      display: block;
+      z-index: 20;
     }
     .thought-bubble::after {
       content: '';
       position: absolute;
-      bottom: -12px;
+      bottom: -11px;
       left: 50%;
       transform: translateX(-50%);
       border-width: 12px 10px 0;
@@ -48,199 +67,748 @@
     .thought-bubble::before {
       content: '';
       position: absolute;
-      bottom: -16px;
+      bottom: -15px;
       left: 50%;
       transform: translateX(-50%);
       border-width: 15px 12px 0;
       border-style: solid;
-      border-color: #111111 transparent;
+      border-color: #0f172a transparent;
       display: block;
       width: 0;
     }
     .stance-badge {
       display: inline-block;
-      font-size: 10px;
+      font-size: 11px;
+      font-weight: 800;
       text-transform: uppercase;
-      background: #d63031;
+      background: #dc2626;
       color: #ffffff;
-      padding: 2px 6px;
-      border-radius: 4px;
-      margin-bottom: 4px;
-      letter-spacing: 0.5px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      letter-spacing: 0.6px;
+      box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+    }
+    #thought-text {
+      margin: 0;
+      line-height: 1.4;
+      word-break: break-word;
     }
     #hype-meter {
       position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: rgba(0, 0, 0, 0.85);
-      border: 2px solid #ffa502;
-      border-radius: 8px;
-      padding: 10px 15px;
+      bottom: 24px;
+      right: 24px;
+      background: rgba(15, 23, 42, 0.92);
+      border: 2px solid #f59e0b;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 12px rgba(245, 158, 11, 0.25);
+      border-radius: 12px;
+      padding: 12px 18px;
       color: #ffffff;
       font-size: 13px;
-      font-weight: bold;
+      font-weight: 800;
+      z-index: 30;
+      backdrop-filter: blur(8px);
     }
     .bar {
-      width: 160px;
-      height: 12px;
-      background: #2d3436;
-      border-radius: 6px;
+      width: 180px;
+      height: 14px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 7px;
       overflow: hidden;
-      margin-top: 5px;
+      margin-top: 6px;
     }
     .fill {
-      width: 0%;
+      width: 50%;
       height: 100%;
-      background: linear-gradient(90deg, #ff7675, #ffa502);
-      transition: width 0.3s ease-out;
+      background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981);
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    #demo-controls {
+    /* Controls Header */
+    .controls-bar {
       position: fixed;
-      top: 15px;
-      left: 15px;
-      z-index: 9999;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 100;
       pointer-events: auto;
     }
-    .demo-btn {
-      background: rgba(0, 0, 0, 0.85);
-      color: #00cec9;
-      border: 2px solid #00cec9;
-      border-radius: 6px;
-      padding: 8px 14px;
-      font-weight: bold;
-      cursor: pointer;
-      font-size: 13px;
-      transition: all 0.2s;
+    .controls-left {
+      display: flex;
+      gap: 10px;
+      align-items: center;
     }
-    .demo-btn:hover {
-      background: #00cec9;
-      color: #000000;
+    .ctrl-btn {
+      background: rgba(15, 23, 42, 0.92);
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 9px 16px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(6px);
+    }
+    .ctrl-btn:hover {
+      background: #1e293b;
+      color: #f8fafc;
+      border-color: #64748b;
+    }
+    .ctrl-btn.active {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #38bdf8;
+      box-shadow: 0 0 16px rgba(14, 165, 233, 0.5);
+    }
+    .info-pill {
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      color: #fde68a;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    .info-pill code {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      padding: 2px 7px;
+      border-radius: 4px;
+      color: #fef08a;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-weight: 700;
     }
   </style>
 </head>
 <body>
-  <div id="demo-controls">
-    <button id="toggle-demo" class="demo-btn">🎮 Preview Demo Mode (ทดลองแสดงผล)</button>
-  </div>
+  <!-- Top Controls Bar -->
+  <header id="controls-bar" class="controls-bar">
+    <div class="controls-left">
+      <button id="btn-simulator" class="ctrl-btn active">🎮 Fighter Simulator (จำลองการต่อสู้)</button>
+      <button id="btn-obs" class="ctrl-btn">🎥 OBS Clean Mode (โปร่งใสสำหรับสตรีม)</button>
+    </div>
+    <div class="controls-right">
+      <span class="info-pill">💡 สู้จริง 60 FPS บนเอนจิน Ikemen GO: รัน <code>./scripts/run_match.sh</code></span>
+    </div>
+  </header>
 
+  <!-- Canvas for Fighter Simulation Arena -->
+  <canvas id="arena-canvas"></canvas>
+
+  <!-- Overlay Elements -->
   <main id="stage" aria-label="Fighting Game Live Overlay">
     <section id="bubble" class="thought-bubble" role="status" aria-live="polite" aria-atomic="true">
       <header id="stance" class="stance-badge" aria-label="Tactical Stance">WHIFF PUNISH</header>
-      <p id="thought-text" aria-label="AI Thought Monologue">เขาต่อยไปทางขวาเปิดหลังโล่ง สวนกลับตรงนี้เลย!</p>
+      <p id="thought-text" aria-label="AI Thought Monologue">เขาต่อยเปิดหลังโล่ง สวนกลับตรงนี้เลย!</p>
     </section>
   </main>
 
   <aside id="hype-meter" aria-label="Crowd Hype Status">
     <div>🔥 CROWD HYPE METER</div>
-    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="hype-bar" aria-label="Hype level percentage">
+    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" id="hype-bar" aria-label="Hype level percentage">
       <div id="hype-fill" class="fill"></div>
     </div>
   </aside>
 
   <script>
+    // Elements
+    const canvas = document.getElementById("arena-canvas");
+    const ctx = canvas.getContext("2d");
     const bubble = document.getElementById("bubble");
     const stance = document.getElementById("stance");
     const thoughtText = document.getElementById("thought-text");
     const hypeBar = document.getElementById("hype-bar");
     const hypeFill = document.getElementById("hype-fill");
-    const demoControls = document.getElementById("demo-controls");
-    const toggleDemoBtn = document.getElementById("toggle-demo");
+    const controlsBar = document.getElementById("controls-bar");
+    const btnSimulator = document.getElementById("btn-simulator");
+    const btnObs = document.getElementById("btn-obs");
 
-    // Hide demo button if in OBS mode (?obs=1 or ?stream=1)
+    // Check URL parameters for OBS Mode (?obs=1 or ?stream=1)
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get("obs") === "1" || urlParams.get("stream") === "1") {
-      demoControls.style.display = "none";
+    let isObsMode = urlParams.get("obs") === "1" || urlParams.get("stream") === "1";
+
+    function setMode(obs) {
+      isObsMode = obs;
+      if (obs) {
+        document.body.classList.add("obs-mode");
+        canvas.style.display = "none";
+        btnObs.classList.add("active");
+        btnSimulator.classList.remove("active");
+        if (urlParams.get("obs") === "1" || urlParams.get("stream") === "1") {
+          controlsBar.style.display = "none";
+        }
+      } else {
+        document.body.classList.remove("obs-mode");
+        canvas.style.display = "block";
+        btnSimulator.classList.add("active");
+        btnObs.classList.remove("active");
+        controlsBar.style.display = "flex";
+      }
+    }
+    setMode(isObsMode);
+
+    btnSimulator.addEventListener("click", () => setMode(false));
+    btnObs.addEventListener("click", () => setMode(true));
+
+    // Resize Canvas to Fullscreen
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    // Simulation Fighter Models
+    const p1 = {
+      x: window.innerWidth * 0.35,
+      y: 0,
+      targetX: window.innerWidth * 0.35,
+      targetY: 0,
+      facing: 1,
+      hp: 850,
+      maxHp: 1000,
+      superMeter: 1000,
+      action: "idle", // idle, walk, punch, kick, anti_air, special, super, block, hit
+      actionTimer: 0,
+      colorGi: "#2563eb",
+      colorPants: "#f8fafc",
+      colorBelt: "#0f172a",
+      colorHeadband: "#38bdf8",
+    };
+
+    const p2 = {
+      x: window.innerWidth * 0.65,
+      y: 0,
+      targetX: window.innerWidth * 0.65,
+      targetY: 0,
+      facing: -1,
+      hp: 420,
+      maxHp: 1000,
+      superMeter: 350,
+      action: "idle",
+      actionTimer: 0,
+      colorGi: "#dc2626",
+      colorPants: "#1e293b",
+      colorBelt: "#0f172a",
+      colorHeadband: "#ef4444",
+    };
+
+    const particles = [];
+    const projectiles = [];
+
+    function addHitSparks(x, y, count = 8, color = "#fbbf24") {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 3 + Math.random() * 6;
+        particles.push({
+          x: x,
+          y: y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          radius: 2 + Math.random() * 3,
+          color: color,
+          life: 1.0,
+          decay: 0.05 + Math.random() * 0.04
+        });
+      }
     }
 
-    let isDemoRunning = false;
-    let demoInterval = null;
-    let demoAnimFrame = null;
-    let demoStep = 0;
-
-    const demoScenarios = [
-      { stance: "WHIFF PUNISH", text: "เขาต่อยไปทางขวาเปิดหลังโล่ง สวนกลับตรงนี้เลย!", hype: 45 },
-      { stance: "ANTI-AIR", text: "ศัตรูกระโดดลอยตัวเข้ามา สอยร่วงด้วยหมัดหนัก (HP)!", hype: 68 },
-      { stance: "RUSHDOWN", text: "คู่ต่อสู้เลือดวิกฤต เดินหน้าบุกกดดันต่อเนื่อง!", hype: 82 },
-      { stance: "SUPER MOVE", text: "เกจพลังเต็ม 1000 ปลดปล่อยท่าไม้ตาย TripleKFPalm พลิกเกม!", hype: 95 },
-      { stance: "CORNER SPACING", text: "เกือบติดมุมฉาก ดึงระยะคุมเชิงรักษาระยะปลอดภัย", hype: 55 },
+    // Scenarios for Combat Choreography
+    const choreography = [
+      {
+        stance: "WHIFF PUNISH",
+        thought: "เขาต่อยหมัดขวาเปิดหลังโล่ง สวนกลับตรงนี้เลย!",
+        hype: 50,
+        p1Act: "punch",
+        p2Act: "hit",
+        setup: () => {
+          p1.targetX = window.innerWidth * 0.44;
+          p2.targetX = window.innerWidth * 0.54;
+          addHitSparks(p2.x - 20, canvas.height * 0.72 - 60, 10, "#fbbf24");
+          p2.hp = Math.max(100, p2.hp - 40);
+        }
+      },
+      {
+        stance: "ANTI-AIR",
+        thought: "ศัตรูกระโดดลอยตัวเข้ามา สอยร่วงด้วยหมัดหนัก (HP)!",
+        hype: 75,
+        p1Act: "anti_air",
+        p2Act: "hit",
+        setup: () => {
+          p1.targetY = -70;
+          p2.targetY = -90;
+          p1.targetX = window.innerWidth * 0.48;
+          p2.targetX = window.innerWidth * 0.52;
+          addHitSparks(p2.x, canvas.height * 0.72 - 120, 14, "#f59e0b");
+          p2.hp = Math.max(100, p2.hp - 60);
+        }
+      },
+      {
+        stance: "SPECIAL ATTACK",
+        thought: "จัดต่อด้วยคลื่นพลังหมัดมังกร (QCF_x) ทะลวงการป้องกัน!",
+        hype: 85,
+        p1Act: "special",
+        p2Act: "block",
+        setup: () => {
+          p1.targetY = 0;
+          p2.targetY = 0;
+          p1.targetX = window.innerWidth * 0.38;
+          p2.targetX = window.innerWidth * 0.62;
+          projectiles.push({
+            x: p1.x + 35,
+            y: canvas.height * 0.72 - 50,
+            vx: 12,
+            targetX: p2.x,
+            radius: 18,
+            color: "#38bdf8"
+          });
+        }
+      },
+      {
+        stance: "SUPER MOVE",
+        thought: "เกจพลังเต็ม 1000 ปลดปล่อยท่าไม้ตาย TripleKFPalm พลิกเกม!",
+        hype: 98,
+        p1Act: "super",
+        p2Act: "hit",
+        setup: () => {
+          p1.targetX = window.innerWidth * 0.48;
+          p2.targetX = window.innerWidth * 0.66;
+          p1.superMeter = 0;
+          addHitSparks(p2.x, canvas.height * 0.72 - 55, 25, "#e11d48");
+          p2.hp = Math.max(40, p2.hp - 120);
+        }
+      },
+      {
+        stance: "RUSHDOWN",
+        thought: "คู่ต่อสู้เลือดวิกฤต เดินหน้าบุกกดดันติดมุมฉากต่อเนื่อง!",
+        hype: 88,
+        p1Act: "kick",
+        p2Act: "block",
+        setup: () => {
+          p1.targetX = window.innerWidth * 0.52;
+          p2.targetX = window.innerWidth * 0.70;
+          addHitSparks(p2.x - 15, canvas.height * 0.72 - 40, 6, "#60a5fa");
+        }
+      },
+      {
+        stance: "CORNER SPACING",
+        thought: "ดึงระยะคุมเชิงรักษาระยะปลอดภัย รอจังหวะสวนกลับ",
+        hype: 62,
+        p1Act: "walk",
+        p2Act: "idle",
+        setup: () => {
+          p1.targetX = window.innerWidth * 0.38;
+          p2.targetX = window.innerWidth * 0.60;
+          p1.targetY = 0;
+          p2.targetY = 0;
+          p1.superMeter = 1000;
+        }
+      }
     ];
 
-    function startDemo() {
-      isDemoRunning = true;
-      toggleDemoBtn.textContent = "⏹️ Stop Demo (หยุดทดลอง)";
-      bubble.style.display = "block";
-      
-      let t = 0;
-      function animateFighter() {
-        if (!isDemoRunning) return;
-        t += 0.03;
-        const posX = Math.sin(t) * 120;
-        const posY = Math.abs(Math.sin(t * 1.5)) * -25;
-        const screenX = window.innerWidth / 2 + posX * 1.5;
-        const screenY = window.innerHeight * 0.75 + posY * 1.5 - 120;
-        bubble.style.left = `${screenX}px`;
-        bubble.style.top = `${screenY}px`;
-        demoAnimFrame = requestAnimationFrame(animateFighter);
-      }
-      animateFighter();
+    let choreoIndex = 0;
+    let choreoTimer = 0;
 
-      function updateScenario() {
-        const item = demoScenarios[demoStep % demoScenarios.length];
-        stance.textContent = item.stance;
-        thoughtText.textContent = item.text;
-        hypeFill.style.width = `${item.hype}%`;
-        hypeBar.setAttribute("aria-valuenow", item.hype.toString());
-        demoStep++;
-      }
-      updateScenario();
-      demoInterval = setInterval(updateScenario, 3000);
+    function triggerNextChoreography() {
+      const step = choreography[choreoIndex % choreography.length];
+      stance.textContent = step.stance;
+      thoughtText.textContent = step.thought;
+      hypeFill.style.width = step.hype + "%";
+      hypeBar.setAttribute("aria-valuenow", step.hype.toString());
+
+      p1.action = step.p1Act;
+      p1.actionTimer = 45;
+      p2.action = step.p2Act;
+      p2.actionTimer = 45;
+
+      if (step.setup) step.setup();
+      choreoIndex++;
     }
 
-    function stopDemo() {
-      isDemoRunning = false;
-      toggleDemoBtn.textContent = "🎮 Preview Demo Mode (ทดลองแสดงผล)";
-      clearInterval(demoInterval);
-      cancelAnimationFrame(demoAnimFrame);
-      bubble.style.display = "none";
-      hypeFill.style.width = "0%";
-      hypeBar.setAttribute("aria-valuenow", "0");
-    }
+    // Drawing Martial Artist Vector Character
+    function drawMartialArtist(f, isP1) {
+      const floorY = canvas.height * 0.72;
+      const posX = f.x;
+      const posY = floorY + f.y;
 
-    toggleDemoBtn.addEventListener("click", () => {
-      if (isDemoRunning) {
-        stopDemo();
-      } else {
-        startDemo();
+      ctx.save();
+      ctx.translate(posX, posY);
+      if (f.facing === -1) {
+        ctx.scale(-1, 1);
       }
-    });
 
-    // Auto-start demo if ?demo=1 is in URL
-    if (urlParams.get("demo") === "1") {
-      startDemo();
+      // Ground Shadow
+      const shadowScale = Math.max(0.2, 1 + f.y / 150);
+      ctx.beginPath();
+      ctx.ellipse(0, 4, 34 * shadowScale, 9 * shadowScale, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.fill();
+
+      // Pose calculation based on action
+      let bob = Math.sin(Date.now() * 0.008) * 3;
+      let torsoY = -48 + bob;
+      let headY = torsoY - 26;
+      let leftArmAngle = 0.2;
+      let rightArmAngle = -0.4;
+      let legSpread = 16;
+
+      if (f.action === "punch") {
+        torsoY = -46;
+        rightArmAngle = 1.35; // punching straight forward
+        leftArmAngle = -0.5;
+        legSpread = 24;
+      } else if (f.action === "kick") {
+        torsoY = -48;
+        legSpread = 32;
+        rightArmAngle = -0.8;
+      } else if (f.action === "anti_air") {
+        torsoY = -52;
+        rightArmAngle = 2.4; // uppercut aimed up
+        leftArmAngle = -0.7;
+      } else if (f.action === "block") {
+        torsoY = -42;
+        leftArmAngle = 0.9;
+        rightArmAngle = 0.7;
+        legSpread = 12;
+      } else if (f.action === "super") {
+        torsoY = -44;
+        leftArmAngle = 1.2;
+        rightArmAngle = 1.2;
+        legSpread = 26;
+      } else if (f.action === "hit") {
+        torsoY = -44;
+        ctx.rotate(-0.15);
+        leftArmAngle = -0.6;
+        rightArmAngle = -0.8;
+      }
+
+      // Legs / Pants
+      ctx.strokeStyle = f.colorPants;
+      ctx.lineWidth = 10;
+      ctx.lineCap = "round";
+
+      // Back leg
+      ctx.beginPath();
+      ctx.moveTo(-4, torsoY + 20);
+      ctx.lineTo(-legSpread, 0);
+      ctx.stroke();
+
+      // Front leg
+      ctx.beginPath();
+      ctx.moveTo(4, torsoY + 20);
+      ctx.lineTo(legSpread, 0);
+      ctx.stroke();
+
+      // Shoes
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(-legSpread - 5, -2, 14, 5);
+      ctx.fillRect(legSpread - 5, -2, 14, 5);
+
+      // Torso / Gi
+      ctx.fillStyle = f.colorGi;
+      ctx.beginPath();
+      ctx.roundRect(-14, torsoY, 28, 30, 4);
+      ctx.fill();
+
+      // Black Belt
+      ctx.fillStyle = f.colorBelt;
+      ctx.fillRect(-15, torsoY + 18, 30, 6);
+      ctx.beginPath();
+      ctx.moveTo(0, torsoY + 24);
+      ctx.lineTo(-4, torsoY + 36);
+      ctx.lineTo(2, torsoY + 36);
+      ctx.fill();
+
+      // Left Arm
+      ctx.strokeStyle = f.colorGi;
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(-10, torsoY + 6);
+      ctx.lineTo(-10 + Math.cos(leftArmAngle) * 22, torsoY + 6 + Math.sin(leftArmAngle) * 22);
+      ctx.stroke();
+
+      // Head
+      ctx.fillStyle = "#fed7aa"; // Skin tone
+      ctx.beginPath();
+      ctx.arc(0, headY, 13, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Headband
+      ctx.fillStyle = f.colorHeadband;
+      ctx.fillRect(-13, headY - 6, 26, 6);
+      // Headband fluttering ribbons
+      const flutter = Math.sin(Date.now() * 0.015) * 4;
+      ctx.beginPath();
+      ctx.moveTo(-12, headY - 3);
+      ctx.lineTo(-24, headY - 1 + flutter);
+      ctx.lineTo(-12, headY);
+      ctx.fill();
+
+      // Right Arm (Foreground)
+      ctx.strokeStyle = f.colorGi;
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(10, torsoY + 6);
+      const handX = 10 + Math.cos(rightArmAngle) * 26;
+      const handY = torsoY + 6 + Math.sin(rightArmAngle) * 26;
+      ctx.lineTo(handX, handY);
+      ctx.stroke();
+
+      // Fist (Skin)
+      ctx.fillStyle = "#fed7aa";
+      ctx.beginPath();
+      ctx.arc(handX, handY, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Block Energy Shield
+      if (f.action === "block") {
+        ctx.strokeStyle = isP1 ? "#38bdf8" : "#f87171";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(20, torsoY + 6, 32, -Math.PI * 0.35, Math.PI * 0.35);
+        ctx.stroke();
+      }
+
+      // Super Aura
+      if (f.action === "super") {
+        ctx.strokeStyle = "rgba(245, 158, 11, 0.7)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        const auraR = 36 + Math.sin(Date.now() * 0.03) * 6;
+        ctx.arc(0, torsoY + 6, auraR, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.restore();
     }
 
-    // Connect to agent-core WebSocket stream
-    let ws = null;
+    // Draw Top Arcade HUD (Health Bars & Round Timer)
+    function drawHUD() {
+      const topY = 70;
+      const barW = Math.min(320, canvas.width * 0.35);
+      const barH = 18;
+
+      // P1 Health Bar
+      const p1X = 24;
+      ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+      ctx.fillRect(p1X - 4, topY - 24, barW + 8, barH + 34);
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(p1X - 4, topY - 24, barW + 8, barH + 34);
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "bold 13px ui-sans-serif, system-ui";
+      ctx.fillText("P1: FRAMEWHISPER AI", p1X, topY - 8);
+
+      // P1 Life Fill
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(p1X, topY, barW, barH);
+      const p1LifeW = (p1.hp / p1.maxHp) * barW;
+      const grad1 = ctx.createLinearGradient(p1X, 0, p1X + barW, 0);
+      grad1.addColorStop(0, "#10b981");
+      grad1.addColorStop(1, "#34d399");
+      ctx.fillStyle = grad1;
+      ctx.fillRect(p1X, topY, p1LifeW, barH);
+
+      // Center VS / Timer Badge
+      const midX = canvas.width / 2;
+      ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+      ctx.fillRect(midX - 35, topY - 20, 70, 48);
+      ctx.strokeStyle = "#f59e0b";
+      ctx.strokeRect(midX - 35, topY - 20, 70, 48);
+
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = "900 24px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("99", midX, topY + 12);
+      ctx.fillStyle = "#ef4444";
+      ctx.font = "bold 10px sans-serif";
+      ctx.fillText("ROUND 1", midX, topY + 24);
+
+      // P2 Health Bar
+      const p2X = canvas.width - barW - 24;
+      ctx.textAlign = "left";
+      ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+      ctx.fillRect(p2X - 4, topY - 24, barW + 8, barH + 34);
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(p2X - 4, topY - 24, barW + 8, barH + 34);
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "bold 13px ui-sans-serif, system-ui";
+      ctx.textAlign = "right";
+      ctx.fillText("P2: KUNG FU MAN", p2X + barW, topY - 8);
+
+      // P2 Life Fill (fills right to left)
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(p2X, topY, barW, barH);
+      const p2LifeW = (p2.hp / p2.maxHp) * barW;
+      const grad2 = ctx.createLinearGradient(p2X, 0, p2X + barW, 0);
+      grad2.addColorStop(0, "#ef4444");
+      grad2.addColorStop(1, "#f87171");
+      ctx.fillStyle = grad2;
+      ctx.fillRect(p2X + (barW - p2LifeW), topY, p2LifeW, barH);
+      ctx.textAlign = "left";
+    }
+
+    // Draw Floor & Stage Grid
+    function drawStage() {
+      const floorY = canvas.height * 0.72;
+
+      // Dark Cyber Dojo Backdrop Gradient
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      bgGrad.addColorStop(0, "#090d16");
+      bgGrad.addColorStop(0.5, "#0f172a");
+      bgGrad.addColorStop(0.72, "#1e1b4b");
+      bgGrad.addColorStop(1, "#030712");
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Floor Platform
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, floorY, canvas.width, canvas.height - floorY);
+
+      // Glowing Arena Baseline
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 3;
+      ctx.shadowColor = "#0284c7";
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.moveTo(0, floorY);
+      ctx.lineTo(canvas.width, floorY);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Floor Perspective Grid Lines
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.12)";
+      ctx.lineWidth = 1;
+      for (let x = -canvas.width * 0.2; x <= canvas.width * 1.2; x += 100) {
+        ctx.beginPath();
+        ctx.moveTo(x, floorY);
+        ctx.lineTo(x + (x - canvas.width / 2) * 0.8, canvas.height);
+        ctx.stroke();
+      }
+    }
+
+    // Main Game Render Loop
+    function gameLoop() {
+      if (!isObsMode) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawStage();
+        drawHUD();
+
+        // Update Fighters Smooth Position
+        p1.x += (p1.targetX - p1.x) * 0.1;
+        p1.y += (p1.targetY - p1.y) * 0.15;
+        p2.x += (p2.targetX - p2.x) * 0.1;
+        p2.y += (p2.targetY - p2.y) * 0.15;
+
+        // Facing Logic
+        p1.facing = p1.x < p2.x ? 1 : -1;
+        p2.facing = p2.x > p1.x ? -1 : 1;
+
+        // Draw Characters
+        drawMartialArtist(p1, true);
+        drawMartialArtist(p2, false);
+
+        // Update and Draw Projectiles
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+          const pr = projectiles[i];
+          pr.x += pr.vx;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(pr.x, pr.y, pr.radius, 0, Math.PI * 2);
+          ctx.fillStyle = pr.color;
+          ctx.shadowColor = pr.color;
+          ctx.shadowBlur = 15;
+          ctx.fill();
+          ctx.restore();
+
+          if (pr.x >= pr.targetX - 20) {
+            addHitSparks(pr.x, pr.y, 16, "#38bdf8");
+            projectiles.splice(i, 1);
+          }
+        }
+
+        // Update and Draw Particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const pt = particles[i];
+          pt.x += pt.vx;
+          pt.y += pt.vy;
+          pt.life -= pt.decay;
+
+          if (pt.life <= 0) {
+            particles.splice(i, 1);
+            continue;
+          }
+
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, pt.radius * pt.life, 0, Math.PI * 2);
+          ctx.fillStyle = pt.color;
+          ctx.fill();
+        }
+
+        // Action Timers
+        if (p1.actionTimer > 0) {
+          p1.actionTimer--;
+          if (p1.actionTimer === 0) p1.action = "idle";
+        }
+        if (p2.actionTimer > 0) {
+          p2.actionTimer--;
+          if (p2.actionTimer === 0) p2.action = "idle";
+        }
+
+        // Sync Thought Bubble Position directly to P1 Head
+        const floorY = canvas.height * 0.72;
+        const bubbleX = p1.x;
+        const bubbleY = floorY + p1.y - 100;
+        bubble.style.left = `${Math.round(bubbleX)}px`;
+        bubble.style.top = `${Math.round(bubbleY)}px`;
+
+        // Advance choreography simulation if no real match telemetry
+        choreoTimer++;
+        if (choreoTimer > 160) {
+          choreoTimer = 0;
+          triggerNextChoreography();
+        }
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    triggerNextChoreography();
+    requestAnimationFrame(gameLoop);
+
+    // WebSocket Stream Connection to agent-core or preview server
     function connectWS() {
       try {
-        ws = new WebSocket("ws://127.0.0.1:8765");
-        ws.onopen = () => {
-          if (isDemoRunning) stopDemo();
-          demoControls.style.display = "none";
-        };
+        const ws = new WebSocket("ws://127.0.0.1:8765");
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
             if (data.type === "AI_THOUGHT") {
-              bubble.style.display = "block";
               stance.textContent = String(data.stance || "TACTICAL");
               thoughtText.textContent = String(data.thought || "...");
-              const posX = Number(data.pos_x) || 0;
-              const posY = Number(data.pos_y) || 0;
-              const screenX = Math.max(20, Math.min(window.innerWidth - 20, window.innerWidth / 2 + posX * 1.5));
-              const screenY = Math.max(20, Math.min(window.innerHeight - 20, window.innerHeight * 0.75 + posY * 1.5 - 120));
-              bubble.style.left = `${screenX}px`;
-              bubble.style.top = `${screenY}px`;
+
+              // Update P1 coordinate if provided
+              if (data.pos_x !== undefined) {
+                p1.targetX = canvas.width / 2 + Number(data.pos_x) * 1.8;
+              }
+              if (data.pos_y !== undefined) {
+                p1.targetY = Number(data.pos_y) * 1.5;
+              }
+              if (data.p2_pos_x !== undefined) {
+                p2.targetX = canvas.width / 2 + Number(data.p2_pos_x) * 1.8;
+              }
+              if (data.p1_state) p1.action = data.p1_state;
+              if (data.p2_state) p2.action = data.p2_state;
             }
             if (data.type === "HYPE_UPDATE") {
               const hypePct = Math.max(0, Math.min(100, Number(data.hype_percentage) || 0));
@@ -248,15 +816,14 @@
               hypeBar.setAttribute("aria-valuenow", hypePct.toString());
             }
           } catch (err) {
-            console.error("Overlay parsing error", err);
+            console.error("WebSocket message error:", err);
           }
         };
         ws.onclose = () => {
-          setTimeout(connectWS, 2000);
+          setTimeout(connectWS, 2500);
         };
       } catch (e) {
-        // Fallback retry
-        setTimeout(connectWS, 2000);
+        setTimeout(connectWS, 2500);
       }
     }
     connectWS();
