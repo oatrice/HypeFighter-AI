@@ -165,6 +165,7 @@ async def broadcast_thoughts():
         stance, thought, hype = demo_stances[(step // 50) % len(demo_stances)]
         pos_x = math.sin(t * 1.5) * 120
         pos_y = -abs(math.sin(t * 3.0)) * 25
+        p2_pos_x = 100 + math.sin(t * 1.2) * 60
 
         payload_thought = json.dumps({
             "type": "AI_THOUGHT",
@@ -172,6 +173,7 @@ async def broadcast_thoughts():
             "thought": thought,
             "pos_x": pos_x,
             "pos_y": pos_y,
+            "p2_pos_x": p2_pos_x,
         })
         payload_hype = json.dumps({
             "type": "HYPE_UPDATE",
@@ -216,7 +218,13 @@ async def main():
             pass
 
     # Start Pure-Python WebSocket Server
-    server = await asyncio.start_server(ws_client_handler, "127.0.0.1", WS_PORT)
+    try:
+        server = await asyncio.start_server(ws_client_handler, "127.0.0.1", WS_PORT, reuse_address=True)
+    except OSError as e:
+        if e.errno == 48:
+            print(f"⚠️ Port {WS_PORT} is already in use by another instance. Using existing preview server.", flush=True)
+            return
+        raise e
     async with server:
         await broadcast_thoughts()
 
