@@ -161,6 +161,27 @@ class SafetyGatekeeper:
             )
             return self._apply_centralized_ground_gate(air_act, is_p1_grounded)
 
+        # 0.7 Corner Escape Mechanism:
+        # When trapped at stage edge (|X| >= 135) and opponent is pressuring closely (Dist <= 60),
+        # execute high forward jump / cross-up escape toward stage center.
+        is_trapped_left = (p1.pos.x <= -135.0 and p2.pos.x > p1.pos.x)
+        is_trapped_right = (p1.pos.x >= 135.0 and p2.pos.x < p1.pos.x)
+        if (is_trapped_left or is_trapped_right) and snapshot.distance <= 60.0 and is_p1_grounded and not p2.is_attacking:
+            escape_abs_h = 1 if is_trapped_left else -1
+            escape_dir = DirectionInput.UP_FORWARD if ((p1.facing == 1 and is_trapped_left) or (p1.facing == -1 and is_trapped_right)) else DirectionInput.UP_BACK
+            escape_act = FighterAction(
+                direction=escape_dir,
+                button=ButtonInput.NONE,
+                macro_intent=EgoCentricIntent.CROSS_UP,
+                forward_locked=False,
+                safe_back_zone=False,
+                is_reaction=True,
+                reaction_type="CORNER_ESCAPE",
+                absolute_horizontal=escape_abs_h,
+                meta={"detail": f"Trapped in corner (x={p1.pos.x:.1f}) with opponent at {snapshot.distance:.1f}px - escaping toward center"},
+            )
+            return self._apply_centralized_ground_gate(escape_act, is_p1_grounded)
+
         # 1. Anti-Air Reaction Guard: Opponent airborne and attacking above grounded P1
         if is_p1_grounded and p2.pos.y < -30.0 and p2.is_attacking and snapshot.distance <= self.anti_air_distance:
             abs_h = 0
@@ -237,6 +258,12 @@ class SafetyGatekeeper:
             return self._apply_centralized_ground_gate(act, is_p1_grounded)
 
         # 4. Standard Relative Ego-Centric Intent Translation
+        # Clutch Aggression Rule: Late in the round (last 30s, frame >= 4140 of 5940),
+        # prevent passive zoning retreat to eliminate timeout draws. Escalate to RUSHDOWN.
+        is_late_round = snapshot.frame >= 4140
+        if is_late_round and not p2.is_attacking and is_p1_grounded:
+            intent = EgoCentricIntent.RUSHDOWN
+
         direction = DirectionInput.NEUTRAL
         button = ButtonInput.NONE
         forward_locked = False
@@ -270,15 +297,18 @@ class SafetyGatekeeper:
 
         abs_h = self._relative_to_absolute_horizontal(direction, p1.facing)
 
+        is_clutch_override = (is_late_round and desired_intent != EgoCentricIntent.RUSHDOWN and intent == EgoCentricIntent.RUSHDOWN)
+
         act = FighterAction(
             direction=direction,
             button=button,
             macro_intent=intent,
             forward_locked=forward_locked,
             safe_back_zone=safe_zone,
-            is_reaction=False,
+            is_reaction=is_clutch_override,
+            reaction_type="CLUTCH_AGGRESSION" if is_clutch_override else None,
             absolute_horizontal=abs_h,
-            meta={"detail": f"Standard intent execution: {intent.value}"},
+            meta={"detail": "Clutch aggression: accelerating offensive push in final 30s" if is_clutch_override else f"Standard intent execution: {intent.value}"},
         )
         return self._apply_centralized_ground_gate(act, is_p1_grounded)
 

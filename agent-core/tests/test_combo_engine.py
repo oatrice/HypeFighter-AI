@@ -258,8 +258,8 @@ def test_okizeme_knockdown_pressure_approach():
 
 def test_okizeme_meaty_timing_buffer():
     engine = ComboEngine()
-    # P2 is rising from ground (stateno 5120), P1 is in close strike range (40px <= 55px)
-    snap = make_snapshot(p1_movetype="I", p2_movetype="I", distance=40.0, frame=30)
+    # P2 is rising from ground (stateno 5120), P1 is in close strike range (40px <= 55px) with Power < 1000
+    snap = make_snapshot(p1_movetype="I", p2_movetype="I", distance=40.0, frame=30, p1_power=500)
     snap.p2.stateno = 5120
     snap.p1.pos.y = 0.0
 
@@ -291,5 +291,20 @@ def test_high_low_mixup_alternation():
     high_attacks = [a for a in actions if a.direction != DirectionInput.DOWN]
     assert len(low_attacks) > 0
     assert len(high_attacks) > 0
+
+
+def test_okizeme_super_finisher_when_power_ge_1000():
+    engine = ComboEngine()
+    # P2 is rising from ground (stateno 5120), P1 is in close strike range (40px <= 55px) with Power >= 1000
+    snap = make_snapshot(p1_movetype="I", p2_movetype="I", distance=40.0, frame=30, p1_power=1000)
+    snap.p2.stateno = 5120
+    snap.p1.pos.y = 0.0
+
+    action = engine.update(snap)
+    assert action is not None
+    assert action.reaction_type == "OKIZEME_SUPER_FINISHER"
+    assert action.cmd == "TripleKFPalm"
+    assert action.macro_intent == EgoCentricIntent.RUSHDOWN
+
 
 

@@ -68,9 +68,12 @@ def analyze_combat_metrics(file_path: str) -> Dict[str, Any]:
     super_punish = 0
     super_finisher = 0
     okizeme_meaty_count = 0
+    okizeme_super_count = 0
     high_low_mixup_count = 0
     wakeup_reversal_count = 0
     air_to_air_count = 0
+    corner_escape_count = 0
+    clutch_aggression_count = 0
     rushdown_frames = 0
     retreat_frames = 0
     zoning_frames = 0
@@ -162,12 +165,19 @@ def analyze_combat_metrics(file_path: str) -> Dict[str, Any]:
                 super_finisher += 1
             if "OKIZEME_MEATY" in action:
                 okizeme_meaty_count += 1
+            if "OKIZEME_SUPER_FINISHER" in action:
+                okizeme_super_count += 1
+                super_finisher += 1
             if "HIGH_LOW_MIXUP" in action:
                 high_low_mixup_count += 1
             if "WAKEUP_REVERSAL" in action or "WAKEUP_REVERSAL_SUPER" in action:
                 wakeup_reversal_count += 1
             if "AIR_TO_AIR_ENGAGE" in action:
                 air_to_air_count += 1
+            if "CORNER_ESCAPE" in action:
+                corner_escape_count += 1
+            if "CLUTCH_AGGRESSION" in action:
+                clutch_aggression_count += 1
 
             # Damage tracking
             if prev_p1_hp is not None and prev_action:
@@ -236,9 +246,12 @@ def analyze_combat_metrics(file_path: str) -> Dict[str, Any]:
     print(f"• Super Punishes (Safe-Zone):    {super_punish} frames")
     print(f"• Super Hit-Confirms (Finisher): {super_finisher} frames")
     print(f"• Okizeme Meaty Pressure:        {okizeme_meaty_count} frames")
+    print(f"• Okizeme Super Finishers:       {okizeme_super_count} frames")
     print(f"• High-Low Mixups:               {high_low_mixup_count} frames")
     print(f"• Wakeup Reversals:              {wakeup_reversal_count} frames")
     print(f"• Air-to-Air Clashes:            {air_to_air_count} frames")
+    print(f"• Corner Escapes:                {corner_escape_count} frames")
+    print(f"• Clutch Aggression Frames:      {clutch_aggression_count} frames")
     print()
     print("--- 📐 SPATIAL & STANCE DISTRIBUTION ---")
     rush_pct = (rushdown_frames / total_frames * 100.0) if total_frames > 0 else 0.0
@@ -277,6 +290,8 @@ def analyze_combat_metrics(file_path: str) -> Dict[str, Any]:
         "high_low_mixup_count": high_low_mixup_count,
         "wakeup_reversal_count": wakeup_reversal_count,
         "air_to_air_count": air_to_air_count,
+        "corner_escape_count": corner_escape_count,
+        "clutch_aggression_count": clutch_aggression_count,
         "corner_pct": round(corner_pct, 1),
         "rushdown_pct": round(rush_pct, 1),
         "zoning_pct": round(zone_pct, 1),
