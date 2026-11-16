@@ -283,10 +283,15 @@ def analyze_combat_metrics(file_path: str) -> Dict[str, Any]:
     }
 
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DEFAULT_LEDGER = os.path.join(PROJECT_ROOT, "benchmarks", "match_ledger.jsonl")
+DEFAULT_MD = os.path.join(PROJECT_ROOT, "benchmarks", "BENCHMARKS.md")
+
+
 def record_match_benchmark(
     stats: Dict[str, Any],
-    ledger_path: str = "benchmarks/match_ledger.jsonl",
-    md_path: str = "benchmarks/BENCHMARKS.md",
+    ledger_path: str = DEFAULT_LEDGER,
+    md_path: str = DEFAULT_MD,
 ) -> None:
     """Record match stats into JSONL ledger and update Markdown dashboard table."""
     os.makedirs(os.path.dirname(ledger_path) or ".", exist_ok=True)
