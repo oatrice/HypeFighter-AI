@@ -242,3 +242,54 @@ def test_combo_engine_target_ceiling_suppresses_ground_special():
     if action is not None:
         assert action.cmd != "QCF_x"
 
+
+def test_okizeme_knockdown_pressure_approach():
+    engine = ComboEngine()
+    # P2 is knocked down on ground (stateno 5100), distance 90px (> 55px)
+    snap = make_snapshot(p1_movetype="I", p2_movetype="H", distance=90.0, frame=20)
+    snap.p2.stateno = 5100
+    snap.p1.pos.y = 0.0
+
+    action = engine.update(snap)
+    assert action is not None
+    assert action.reaction_type == "OKIZEME_APPROACH"
+    assert action.direction == DirectionInput.FORWARD
+
+
+def test_okizeme_meaty_timing_buffer():
+    engine = ComboEngine()
+    # P2 is rising from ground (stateno 5120), P1 is in close strike range (40px <= 55px)
+    snap = make_snapshot(p1_movetype="I", p2_movetype="I", distance=40.0, frame=30)
+    snap.p2.stateno = 5120
+    snap.p1.pos.y = 0.0
+
+    action = engine.update(snap)
+    assert action is not None
+    assert action.reaction_type == "OKIZEME_MEATY"
+    assert action.direction == DirectionInput.DOWN
+    assert action.button in (ButtonInput.LIGHT_KICK, ButtonInput.LIGHT_PUNCH)
+
+
+def test_high_low_mixup_alternation():
+    engine = ComboEngine()
+    # Simulate opponent holding block for 35 consecutive frames at close range (50px)
+    snap = make_snapshot(p1_movetype="I", p2_movetype="I", distance=50.0, frame=1)
+    snap.p2.stateno = 130  # Standing guard
+    snap.p1.pos.y = 0.0
+
+    # Feed 35 frames of block
+    actions = []
+    for f in range(1, 40):
+        snap.frame = f
+        act = engine.update(snap)
+        if act and act.reaction_type == "HIGH_LOW_MIXUP":
+            actions.append(act)
+
+    assert len(actions) >= 2
+    # Verify that mixup alternates between low (crouching) and high/mid attacks
+    low_attacks = [a for a in actions if a.direction == DirectionInput.DOWN]
+    high_attacks = [a for a in actions if a.direction != DirectionInput.DOWN]
+    assert len(low_attacks) > 0
+    assert len(high_attacks) > 0
+
+

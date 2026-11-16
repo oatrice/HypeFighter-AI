@@ -31,6 +31,7 @@ class SafetyGatekeeper:
         self.altitude_ceiling_threshold = altitude_ceiling_threshold
         self.super_cooldown_frames = super_cooldown_frames
         self.last_super_frame = -999
+        self.p1_prev_stateno: int = 0
 
     def is_in_safe_back_zone(self, p1: PlayerState, p2: PlayerState) -> bool:
         """Determines if AI (P1) is behind the attacking opponent (P2) relative to P2's attack direction.
@@ -68,6 +69,8 @@ class SafetyGatekeeper:
         intent = desired_intent or EgoCentricIntent.RETREAT
         p1 = snapshot.p1
         p2 = snapshot.p2
+        prev_stateno = self.p1_prev_stateno
+        self.p1_prev_stateno = p1.stateno
         safe_zone = self.is_in_safe_back_zone(p1, p2)
         is_p1_grounded = p1.pos.y >= -5.0
         is_p2_reachable = p2.pos.y >= -80.0
@@ -109,6 +112,54 @@ class SafetyGatekeeper:
                     "detail": f"Fighter altitude ({p1.pos.y}) breached ceiling ({self.altitude_ceiling_threshold}) - neutralizing upward inputs for gravity recovery"
                 },
             )
+
+        # 0.5 Wakeup Reversal Guard: Frame-1 invulnerable Dragon Punch or Super upon waking up from knockdown
+        is_wakeup_frame = (prev_stateno == 5120 and p1.stateno in (0, 10, 11))
+        if is_wakeup_frame and p2.is_attacking and snapshot.distance <= 80.0:
+            if is_super_ready:
+                self.last_super_frame = snapshot.frame
+                reversal_act = FighterAction(
+                    direction=DirectionInput.NEUTRAL,
+                    button=ButtonInput.NONE,
+                    cmd="TripleKFPalm",
+                    macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
+                    forward_locked=True,
+                    safe_back_zone=False,
+                    is_reaction=True,
+                    reaction_type="WAKEUP_REVERSAL_SUPER",
+                    absolute_horizontal=0,
+                    meta={"detail": "Wakeup reversal super: TripleKFPalm on frame 1"},
+                )
+            else:
+                reversal_act = FighterAction(
+                    direction=DirectionInput.NEUTRAL,
+                    button=ButtonInput.NONE,
+                    cmd="SmashKFUpper",
+                    macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
+                    forward_locked=True,
+                    safe_back_zone=False,
+                    is_reaction=True,
+                    reaction_type="WAKEUP_REVERSAL",
+                    absolute_horizontal=0,
+                    meta={"detail": "Wakeup reversal DP: SmashKFUpper on frame 1"},
+                )
+            return self._apply_centralized_ground_gate(reversal_act, is_p1_grounded)
+
+        # 0.6 Air-to-Air Priority Collision Guard:
+        # When both fighters are airborne at close range and opponent is not in hitstun, contest airspace with heavy air normal.
+        if not is_p1_grounded and p2.pos.y < -15.0 and snapshot.distance <= 90.0 and not (p2.is_hurt or p2.movetype == "H"):
+            air_act = FighterAction(
+                direction=DirectionInput.NEUTRAL,
+                button=ButtonInput.HEAVY_PUNCH,
+                macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
+                forward_locked=True,
+                safe_back_zone=False,
+                is_reaction=True,
+                reaction_type="AIR_TO_AIR_ENGAGE",
+                absolute_horizontal=0,
+                meta={"detail": "Both fighters airborne within 90px - contesting airspace with air heavy punch"},
+            )
+            return self._apply_centralized_ground_gate(air_act, is_p1_grounded)
 
         # 1. Anti-Air Reaction Guard: Opponent airborne and attacking above grounded P1
         if is_p1_grounded and p2.pos.y < -30.0 and p2.is_attacking and snapshot.distance <= self.anti_air_distance:

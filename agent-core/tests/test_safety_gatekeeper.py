@@ -376,3 +376,62 @@ def test_corner_avoidance_spacing(gatekeeper):
     assert action_right.direction != DirectionInput.BACK
 
 
+def test_wakeup_reversal_smash_kf_upper(gatekeeper):
+    # Tick 1: P1 is getting up from knockdown (stateno 5120)
+    snap1 = create_snapshot(
+        p1_x=-30.0, p1_y=0.0, p1_facing=1, p1_movetype="H",
+        p2_x=20.0, p2_y=0.0, p2_facing=-1, p2_movetype="A",
+        p1_power=500  # < 1000 power
+    )
+    snap1.p1.stateno = 5120
+    gatekeeper.evaluate(snap1)
+
+    # Tick 2: P1 stands up on frame 1 (stateno 0) while P2 is attacking at Dist = 50px
+    snap2 = create_snapshot(
+        p1_x=-30.0, p1_y=0.0, p1_facing=1, p1_movetype="I",
+        p2_x=20.0, p2_y=0.0, p2_facing=-1, p2_movetype="A",
+        p1_power=500
+    )
+    snap2.p1.stateno = 0
+    action = gatekeeper.evaluate(snap2)
+
+    assert action.reaction_type == "WAKEUP_REVERSAL"
+    assert action.cmd == "SmashKFUpper"
+
+
+def test_wakeup_reversal_triple_kf_palm(gatekeeper):
+    # Tick 1: P1 is getting up from knockdown with full super gauge (>= 1000)
+    snap1 = create_snapshot(
+        p1_x=-30.0, p1_y=0.0, p1_facing=1, p1_movetype="H",
+        p2_x=20.0, p2_y=0.0, p2_facing=-1, p2_movetype="A",
+        p1_power=1500
+    )
+    snap1.p1.stateno = 5120
+    gatekeeper.evaluate(snap1)
+
+    # Tick 2: P1 stands up on frame 1 while P2 attacks
+    snap2 = create_snapshot(
+        p1_x=-30.0, p1_y=0.0, p1_facing=1, p1_movetype="I",
+        p2_x=20.0, p2_y=0.0, p2_facing=-1, p2_movetype="A",
+        p1_power=1500
+    )
+    snap2.p1.stateno = 0
+    action = gatekeeper.evaluate(snap2)
+
+    assert action.reaction_type == "WAKEUP_REVERSAL_SUPER"
+    assert action.cmd == "TripleKFPalm"
+
+
+def test_air_to_air_aerial_collision(gatekeeper):
+    # Both P1 and P2 are airborne (y < -15.0 px) within Dist = 50px
+    snapshot = create_snapshot(
+        p1_x=-20.0, p1_y=-40.0, p1_facing=1, p1_movetype="I",
+        p2_x=30.0, p2_y=-50.0, p2_facing=-1, p2_movetype="A"
+    )
+    action = gatekeeper.evaluate(snapshot, desired_intent=EgoCentricIntent.RETREAT)
+
+    assert action.reaction_type == "AIR_TO_AIR_ENGAGE"
+    assert action.button == ButtonInput.HEAVY_PUNCH
+
+
+

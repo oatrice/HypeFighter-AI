@@ -33,6 +33,8 @@ class ComboEngine:
         self.state: ComboState = ComboState.IDLE
         self.current_step: int = 0
         self.last_attack_frame: int = 0
+        self.p2_consecutive_block_frames: int = 0
+        self.last_mixup_was_low: bool = False
 
     def reset(self):
         """Resets the combo engine to IDLE state."""
@@ -45,6 +47,70 @@ class ComboEngine:
         p1 = snapshot.p1
         p2 = snapshot.p2
         frame = snapshot.frame
+
+        is_p1_grounded = p1.pos.y >= -5.0
+        is_p2_blocking = (120 <= p2.stateno <= 155) or p2.stateno in (120, 130, 140, 150)
+        if is_p2_blocking:
+            self.p2_consecutive_block_frames += 1
+        else:
+            self.p2_consecutive_block_frames = 0
+
+        # Okizeme Knockdown Pressure & Meaty Buffering
+        is_p2_knockdown = p2.stateno in (5100, 5110, 5120)
+        if is_p2_knockdown and is_p1_grounded:
+            if self.state != ComboState.IDLE:
+                self.reset()
+            if p2.stateno == 5120 and snapshot.distance <= 55.0:
+                return FighterAction(
+                    direction=DirectionInput.DOWN,
+                    button=ButtonInput.LIGHT_KICK,
+                    macro_intent=EgoCentricIntent.RUSHDOWN,
+                    forward_locked=False,
+                    is_reaction=True,
+                    reaction_type="OKIZEME_MEATY",
+                    absolute_horizontal=0,
+                    meta={"detail": "Okizeme meaty: buffering frame-1 c.LK on rising opponent (5120)"},
+                )
+            elif snapshot.distance > 55.0:
+                return FighterAction(
+                    direction=DirectionInput.FORWARD,
+                    button=ButtonInput.NONE,
+                    macro_intent=EgoCentricIntent.RUSHDOWN,
+                    forward_locked=False,
+                    is_reaction=True,
+                    reaction_type="OKIZEME_APPROACH",
+                    absolute_horizontal=1 if p1.facing == 1 else -1,
+                    meta={"detail": "Okizeme approach: advancing forward into meaty strike distance"},
+                )
+
+        # High-Low Offensive Mixup against sustained turtling (holding block >= 30 frames)
+        if self.p2_consecutive_block_frames >= 30 and snapshot.distance <= 75.0 and is_p1_grounded:
+            if self.state != ComboState.IDLE:
+                self.reset()
+            if self.last_mixup_was_low:
+                self.last_mixup_was_low = False
+                return FighterAction(
+                    direction=DirectionInput.NEUTRAL,
+                    button=ButtonInput.LIGHT_PUNCH,
+                    macro_intent=EgoCentricIntent.RUSHDOWN,
+                    forward_locked=False,
+                    is_reaction=True,
+                    reaction_type="HIGH_LOW_MIXUP",
+                    absolute_horizontal=0,
+                    meta={"detail": "High-low offensive mixup: standing high attack (LP)"},
+                )
+            else:
+                self.last_mixup_was_low = True
+                return FighterAction(
+                    direction=DirectionInput.DOWN,
+                    button=ButtonInput.LIGHT_KICK,
+                    macro_intent=EgoCentricIntent.RUSHDOWN,
+                    forward_locked=False,
+                    is_reaction=True,
+                    reaction_type="HIGH_LOW_MIXUP",
+                    absolute_horizontal=0,
+                    meta={"detail": "High-low offensive mixup: crouching low sweep (DOWN+LK)"},
+                )
 
         # 1. State: IDLE -> Transition to INITIATING on attack startup in close combat range
         if self.state == ComboState.IDLE:
