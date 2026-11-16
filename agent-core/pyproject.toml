@@ -1,6 +1,6 @@
 [project]
 name = "hypefighter-agent-core"
-version = "0.1.2"
+version = "0.2.0"
 description = "60Hz Safety Gatekeeper & Tactical Brain for Ikemen GO AI Fighting Agent"
 readme = "README.md"
 requires-python = ">=3.10"

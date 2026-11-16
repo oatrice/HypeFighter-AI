@@ -10,7 +10,7 @@
       padding: 0;
       overflow: hidden;
       background: transparent;
-      font-family: 'Comic Sans MS', 'Chalkboard SE', 'Sarabun', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
     #stage {
       position: relative;
@@ -61,51 +61,55 @@
       display: inline-block;
       font-size: 10px;
       text-transform: uppercase;
-      background: #ff4757;
+      background: #d63031;
       color: #ffffff;
       padding: 2px 6px;
       border-radius: 4px;
       margin-bottom: 4px;
+      letter-spacing: 0.5px;
     }
     #hype-meter {
       position: fixed;
       bottom: 20px;
       right: 20px;
-      background: rgba(0, 0, 0, 0.7);
+      background: rgba(0, 0, 0, 0.85);
       border: 2px solid #ffa502;
       border-radius: 8px;
       padding: 10px 15px;
       color: #ffffff;
       font-size: 13px;
+      font-weight: bold;
     }
     .bar {
       width: 160px;
       height: 12px;
-      background: #333333;
+      background: #2d3436;
       border-radius: 6px;
       overflow: hidden;
       margin-top: 5px;
     }
     .fill {
-      width: 45%;
+      width: 0%;
       height: 100%;
-      background: linear-gradient(90deg, #ff4757, #ffa502);
-      transition: width 0.3s;
+      background: linear-gradient(90deg, #ff7675, #ffa502);
+      transition: width 0.3s ease-out;
     }
   </style>
 </head>
 <body>
-  <div id="stage">
-    <div id="bubble" class="thought-bubble">
-      <div id="stance" class="stance-badge">WHIFF PUNISH</div>
-      <div id="thought-text">เขาต่อยไปทางขวาเปิดหลังโล่ง สวนกลับตรงนี้เลย!</div>
-    </div>
-  </div>
+  <main id="stage" aria-label="Fighting Game Live Overlay">
+    <section id="bubble" class="thought-bubble" role="status" aria-live="polite" aria-atomic="true">
+      <header id="stance" class="stance-badge" aria-label="Tactical Stance">WHIFF PUNISH</header>
+      <p id="thought-text" aria-label="AI Thought Monologue">เขาต่อยไปทางขวาเปิดหลังโล่ง สวนกลับตรงนี้เลย!</p>
+    </section>
+  </main>
 
-  <div id="hype-meter">
+  <aside id="hype-meter" aria-label="Crowd Hype Status">
     <div>🔥 CROWD HYPE METER</div>
-    <div class="bar"><div id="hype-fill" class="fill"></div></div>
-  </div>
+    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="hype-bar" aria-label="Hype level percentage">
+      <div id="hype-fill" class="fill"></div>
+    </div>
+  </aside>
 
   <script>
     // Connect to agent-core WebSocket stream
@@ -113,6 +117,7 @@
     const bubble = document.getElementById("bubble");
     const stance = document.getElementById("stance");
     const thoughtText = document.getElementById("thought-text");
+    const hypeBar = document.getElementById("hype-bar");
     const hypeFill = document.getElementById("hype-fill");
 
     ws.onmessage = (event) => {
@@ -120,17 +125,21 @@
         const data = JSON.parse(event.data);
         if (data.type === "AI_THOUGHT") {
           bubble.style.display = "block";
-          stance.innerText = data.stance || "TACTICAL";
-          thoughtText.innerText = data.thought || "...";
+          stance.textContent = String(data.stance || "TACTICAL");
+          thoughtText.textContent = String(data.thought || "...");
           
-          // Map game coordinates to screen coordinates
-          const screenX = window.innerWidth / 2 + (data.pos_x || 0) * 1.5;
-          const screenY = window.innerHeight * 0.75 + (data.pos_y || 0) * 1.5 - 120;
+          // Map game coordinates to screen coordinates safely
+          const posX = Number(data.pos_x) || 0;
+          const posY = Number(data.pos_y) || 0;
+          const screenX = Math.max(20, Math.min(window.innerWidth - 20, window.innerWidth / 2 + posX * 1.5));
+          const screenY = Math.max(20, Math.min(window.innerHeight - 20, window.innerHeight * 0.75 + posY * 1.5 - 120));
           bubble.style.left = `${screenX}px`;
           bubble.style.top = `${screenY}px`;
         }
         if (data.type === "HYPE_UPDATE") {
-          hypeFill.style.width = `${Math.min(100, data.hype_percentage)}%`;
+          const hypePct = Math.max(0, Math.min(100, Number(data.hype_percentage) || 0));
+          hypeFill.style.width = `${hypePct}%`;
+          hypeBar.setAttribute("aria-valuenow", hypePct.toString());
         }
       } catch (err) {
         console.error("Overlay parsing error", err);

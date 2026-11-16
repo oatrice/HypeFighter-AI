@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-16
+
+### Added
+- **Combat Macro Engine (`combo_engine.py`)**: 3-stage combat engine (`IDLE`, `INITIATING`, `CONFIRMED`) with hit-confirm chaining, special cancels (`QCF_x`), and super moves (`TripleKFPalm`) (#10).
+- **High/Low & Aerial Defense Gate (`safety_gatekeeper.py`)**: dynamic guard mixup detection (`INSTANT_BLOCK_LOW`, `INSTANT_BLOCK_HIGH`, `INSTANT_BLOCK_AIR`) based on opponent and self altitudes (#10, #11).
+- **Super Punish In-Place & Cooldown Guard**: executes super move finisher upon safe-zone detection when power meter $\ge 1000$ with 45-frame cooldown enforcement (#12).
+- **Corner-Avoidance Boundary Spacing**: clamps retreat movement to neutral when backed against stage boundaries ($|X| \ge 140.0$) (#14).
+- **Sustained Rushdown Commitment**: 12-frame forward commitment counter eliminating 1-frame intent flicker during close combat or opponent closeout ($HP \le 250$) (#14).
+- **Combat Telemetry Metrics CLI (`scripts/analyze_combat_metrics.py`)**: automated tool calculating guard success rate, damage mitigation, super execution, and stance distributions (#14).
+- **Continuous Integration Pipeline (`.gitlab-ci.yml`)**: GitLab CI configuration with lint, unit tests, security fuzzing, latency benchmark, and package build stages.
+- **Expanded Testing Suites**: Fuzzing & security injection suite (`test_security_fuzzing.py`), combinatorial pairwise matrix (`test_pairwise_matrix.py`), and burst stress testing (`test_performance_stress.py`). Total 71 tests passing with 100% success rate.
+
+### Changed
+- **Strict Combo Abort Guards**: 5-condition validation requiring both fighters grounded and within close range ($\le 130\text{px}$) before allowing aborts, eliminating false abort triggers (#13).
+- **State Hygiene & Round Reset**: resets `ComboEngine`, purges commentary cache, increments `round_epoch`, and restores baseline 1000 HP state immediately on `ROUND RESET` (#11, #14).
+- **Ground Gate Filter**: central suppression of grounded specials and rushdown punch buttons when airborne ($Y < -5.0$), preserving mid-air combo juggles (#12, #14).
+- **Real-Time Distance Synchronization**: ensures monologue distances dynamically reflect actual telemetry snapshot distance (#12, #13).
+- **Overlay Accessibility & Security**: added ARIA landmarks, WCAG-compliant badge contrast, and safe numeric coordinate clamping in `overlay-ui/index.html`.
+
 ## [0.1.2] - 2026-11-15
 
 ### Changed

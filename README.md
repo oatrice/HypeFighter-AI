@@ -1,6 +1,6 @@
 # FrameWhisper (CornerCoach) 🥊🤖
 
-[![Version](https://img.shields.io/badge/version-0.1.2-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)]()
 [![Engine](https://img.shields.io/badge/engine-Ikemen%20GO-red.svg)](https://github.com/ikemen-engine/Ikemen-GO)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
