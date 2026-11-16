@@ -35,3 +35,6 @@ match_history*.txt
 events.jsonl
 *.dat
 uv.lock
+
+/save/
+match_history_batch_*.txt
