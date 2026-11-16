@@ -33,13 +33,19 @@ echo "Starting 60Hz AI Agent Core (Logging to $MATCH_LOG)..."
 python3 -u -m agent_core.runner 2>&1 | tee "$MATCH_LOG" &
 AGENT_PID=$!
 
-# Trap signals to ensure background python process is killed on exit
+# Trap signals to ensure background python process is killed on exit and metrics appended to match log
+_metrics_analyzed=0
 cleanup() {
     echo ""
     echo "Shutting down FrameWhisper..."
     kill $AGENT_PID 2>/dev/null || true
     wait $AGENT_PID 2>/dev/null || true
     echo "Clean shutdown complete."
+    if [ "$_metrics_analyzed" -eq 0 ] && [ -f "$MATCH_LOG" ] && [ -s "$MATCH_LOG" ]; then
+        _metrics_analyzed=1
+        echo "" | tee -a "$MATCH_LOG"
+        python3 "$PROJECT_ROOT/scripts/analyze_combat_metrics.py" "$MATCH_LOG" | tee -a "$MATCH_LOG"
+    fi
 }
 trap cleanup EXIT INT TERM
 
@@ -97,12 +103,4 @@ fi
     -height 720
 
 echo "Match completed."
-
-# Auto-analyze combat metrics immediately upon match completion
-if [ -f "$MATCH_LOG" ] && [ -s "$MATCH_LOG" ]; then
-    echo ""
-    echo "============================================================"
-    echo "📊 FrameWhisper Auto Post-Match Combat Efficiency Metrics"
-    echo "============================================================"
-    python3 "$PROJECT_ROOT/scripts/analyze_combat_metrics.py" "$MATCH_LOG"
-fi
+exit 0
