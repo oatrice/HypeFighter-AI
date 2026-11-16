@@ -194,5 +194,66 @@ def test_sustained_rushdown_commitment(runner):
     assert len(rushdown_frames) >= 8, f"Expected sustained Rushdown >= 8 frames, but got {len(rushdown_frames)}"
 
 
+def test_reaction_synced_narrative_okizeme_meaty(runner, capsys):
+    from agent_core.tactician.tactical_brain import TacticalDecision
+    from agent_core.models.telemetry import EgoCentricIntent, FighterAction, ButtonInput, DirectionInput
+
+    runner._latest_decision = TacticalDecision(
+        stance="neutral_footsies",
+        macro_intent=EgoCentricIntent.ZONING,
+        thought="คุมระยะ",
+        internal_monologue="ถอยคุมระยะ 150.0px",
+        public_chat="รอดูเชิง",
+    )
+
+    runner.combo_engine.update = MagicMock(return_value=FighterAction(
+        direction=DirectionInput.DOWN,
+        button=ButtonInput.LIGHT_KICK,
+        macro_intent=EgoCentricIntent.RUSHDOWN,
+        is_reaction=True,
+        reaction_type="OKIZEME_MEATY",
+    ))
+
+    p1 = PlayerState(id=1, life=1000, pos=Position(x=0.0, y=0.0), facing=1, movetype="I")
+    p2 = PlayerState(id=2, life=800, pos=Position(x=45.0, y=0.0), facing=-1, movetype="I")
+    snap = MatchSnapshot(frame=300, timestamp_ms=5000, distance=45.0, safe_back_zone=False, p1=p1, p2=p2)
+    runner.on_snapshot(snap)
+
+    out = capsys.readouterr().out
+    assert "Meaty" in out or "Wakeup" in out or "ดักเตะล่าง" in out
+
+
+def test_reaction_synced_narrative_wakeup_reversal(runner, capsys):
+    from agent_core.tactician.tactical_brain import TacticalDecision
+    from agent_core.models.telemetry import EgoCentricIntent, FighterAction, ButtonInput, DirectionInput
+
+    runner._latest_decision = TacticalDecision(
+        stance="clutch_defense",
+        macro_intent=EgoCentricIntent.RETREAT,
+        thought="ระวังตัว",
+        internal_monologue="ถอยตั้งการ์ด 80.0px",
+        public_chat="ตั้งหลัก",
+    )
+
+    # Simulate Gatekeeper generating WAKEUP_REVERSAL
+    runner.gatekeeper.evaluate = MagicMock(return_value=FighterAction(
+        direction=DirectionInput.NEUTRAL,
+        button=ButtonInput.NONE,
+        cmd="SmashKFUpper",
+        macro_intent=EgoCentricIntent.HOLD_SAFE_PUNISH,
+        is_reaction=True,
+        reaction_type="WAKEUP_REVERSAL",
+    ))
+
+    p1 = PlayerState(id=1, life=600, pos=Position(x=-30.0, y=0.0), facing=1, movetype="I")
+    p2 = PlayerState(id=2, life=900, pos=Position(x=20.0, y=0.0), facing=-1, movetype="A")
+    snap = MatchSnapshot(frame=400, timestamp_ms=6600, distance=50.0, safe_back_zone=False, p1=p1, p2=p2)
+    runner.on_snapshot(snap)
+
+    out = capsys.readouterr().out
+    assert "Smash Kung Fu Upper" in out or "โชริวเคน" in out
+
+
+
 
 

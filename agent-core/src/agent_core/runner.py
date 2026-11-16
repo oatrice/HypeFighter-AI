@@ -239,6 +239,24 @@ class MatchRunner:
                     elif rtype == "ALTITUDE_CEILING_RECOVERY":
                         monologue = f"ระดับความสูง {snapshot.p1.pos.y:.1f} ใกล้เพดานเวที! ปล่อยตัวลงตามแรงโน้มถ่วงเพื่อความปลอดภัย"
                         chat = "ปรับระดับความสูงลงมาตั้งหลัก"
+                    elif rtype == "OKIZEME_APPROACH":
+                        monologue = f"ศัตรูล้มลงกับพื้น! รีบเดินหน้ากดดันเข้าสู่ระยะ Meaty ({dist_str}) ทันที!"
+                        chat = "ล้มไปแล้ว อย่าหวังว่าจะได้ลุกขึ้นมาง่ายๆ!"
+                    elif rtype == "OKIZEME_MEATY":
+                        monologue = f"ศัตรูกำลังลุกขึ้น (Wakeup)! บัฟเฟอร์การโจมตี Meaty Frame 1 ที่ระยะ {dist_str} ดักตักทันที!"
+                        chat = "ลุกขึ้นมาก็โดนดักเตะล่างทันที!"
+                    elif rtype == "HIGH_LOW_MIXUP":
+                        monologue = f"คู่ต่อสู้ตั้งการ์ดแช่นิ่งนานเกินไป! หลอกสลับโจมตี บน-ล่าง (High-Low Mixup) ที่ระยะ {dist_str} เพื่อเจาะการ์ด!"
+                        chat = "ตั้งการ์ดแน่นนักใช่ไหม? เจอสลับ บน-ล่าง หน่อยเป็นไง!"
+                    elif rtype == "WAKEUP_REVERSAL":
+                        monologue = f"เราเพิ่งลุกขึ้นจากพื้น! สวนด้วยท่าไม้ตายไร้เทียมทาน Smash Kung Fu Upper (DP) ที่ระยะ {dist_str} ทันที!"
+                        chat = "อย่าคิดว่าจะกดดันตอนลุกได้ง่ายๆ! สวนด้วยโชริวเคน!"
+                    elif rtype == "WAKEUP_REVERSAL_SUPER":
+                        monologue = f"ลุกขึ้นมาพร้อมเกจพลังเต็มเปี่ยม! ระเบิดท่าไม้ตายระดับซูเปอร์ Triple Kung Fu Palm ที่ระยะ {dist_str} พลิกสถานการณ์!"
+                        chat = "จังหวะลุกนี่แหละ... สวนด้วยท่าไม้ตายสูงสุด!"
+                    elif rtype == "AIR_TO_AIR_ENGAGE":
+                        monologue = f"ลอยตัวกลางอากาศปะทะกันที่ระยะ {dist_str}! ชิงออกหมัดหนักกลางอากาศ (Air-to-Air Engage) เพื่อคุมน่านฟ้า!"
+                        chat = "น่านฟ้านี้ฉันคุม! หมัดหนักกลางอากาศไปกินซะ!"
                     elif rtype == "ROUND_OVER":
                         if snapshot.p1.life <= 0:
                             monologue = f"พ่ายแพ้ในยกนี้ที่ระยะ {dist_str} เตรียมวางแผนแก้เกมในยกถัดไป"
@@ -257,6 +275,19 @@ class MatchRunner:
                 print(f"  💬 [P1 In-Game Chat]: \"{chat}\"", flush=True)
                 if dec.audience_reply:
                     print(f"  📣 [P1 Crowd Reply]: \"{dec.audience_reply}\"", flush=True)
+                try:
+                    display_dec = dec.model_copy(update={
+                        "thought": chat,
+                        "thought_bubble": chat,
+                        "internal_monologue": monologue,
+                        "public_chat": chat,
+                    })
+                    tmp_thought = self.thought_file + ".tmp"
+                    with open(tmp_thought, "w", encoding="utf-8") as f:
+                        f.write(display_dec.model_dump_json())
+                    os.replace(tmp_thought, self.thought_file)
+                except Exception:
+                    pass
 
     async def _poll_file_fallback(self):
         """Polls IPC telemetry file if UDP packets are not arriving."""
